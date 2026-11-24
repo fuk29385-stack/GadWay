@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7f5">
+  <meta name="description" content="Карманный путеводитель по Санкт-Петербургу: места, дневной маршрут, отели и советы. Откройте город в своём темпе.">
+  <title>GadWay — Петербург рядом</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://basemaps.cartocdn.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app-shell">
+    <div id="map" aria-label="Карта Санкт-Петербурга"></div>
+    <div id="map-fallback" aria-hidden="true">
+      <div class="fallback-river"></div><div class="fallback-road road-one"></div><div class="fallback-road road-two"></div>
+      <span class="fallback-label label-center">ДВОРЦОВАЯ ПЛОЩАДЬ</span><span class="fallback-label label-neva">НЕВА</span>
+    </div>
+    <div class="map-vignette" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand-pill"><span class="brand-mark">g</span><span><strong>GadWay</strong><small>ПЕТЕРБУРГ</small></span></div>
+      <div class="topbar-actions">
+        <button class="icon-button" id="locate-button" type="button" aria-label="Моё местоположение" title="Моё местоположение">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.2"></circle><circle cx="12" cy="12" r="2.2"></circle><path d="M12 2v2.5M22 12h-2.5M12 22v-2.5M2 12h2.5"></path></svg>
+        </button>
+        <div class="weather-pill" id="city-pill" aria-label="Город путеводителя"><span class="weather-dot"></span><span>Санкт-Петербург</span></div>
+      </div>
+    </header>
+
+    <div class="map-caption" id="map-caption"><span class="caption-dot"></span><span>Исаакиевский собор</span><span class="caption-separator">·</span><span>центр города</span></div>
+    <div class="map-zoom-controls" aria-label="Управление масштабом карты">
+      <button id="zoom-in" type="button" aria-label="Приблизить">+</button><button id="zoom-out" type="button" aria-label="Отдалить">−</button>
+    </div>
+    <div class="map-credit">© OpenStreetMap · © CARTO</div>
+
+    <section class="bottom-sheet" id="bottom-sheet" aria-label="Панель путеводителя" data-state="half">
+      <button class="sheet-handle-area" id="sheet-handle" type="button" aria-label="Переместить панель. Нажмите, чтобы изменить её высоту" aria-controls="sheet-content">
+        <span class="sheet-handle"></span>
+      </button>
+      <div class="sheet-heading">
+        <div class="sheet-heading-copy"><p class="sheet-kicker" id="sheet-kicker">ВАШ ГОРОДСКОЙ ГИД</p><h1 id="sheet-title">Исследуйте Петербург</h1><p class="sheet-summary" id="sheet-summary">Красивые места, прогулки и маленькие открытия рядом.</p></div>
+        <button class="sheet-action" id="sheet-action" type="button" aria-label="Поделиться" title="Поделиться">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.5-4.4M8.2 13.2l7.5 4.4"></path></svg>
+        </button>
+      </div>
+      <div class="sheet-scroll" id="sheet-content">
+        <section class="tab-panel" id="panel-map" aria-label="Места на карте">
+          <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg><input id="place-search" type="search" placeholder="Место, кухня или впечатление" autocomplete="off"><button id="clear-search" type="button" aria-label="Очистить поиск" hidden>×</button></label>
+          <div class="filter-chips" id="filter-chips" role="group" aria-label="Фильтр мест">
+            <button class="filter-chip is-active" type="button" data-filter="all">Все</button><button class="filter-chip" type="button" data-filter="food">Поесть</button><button class="filter-chip" type="button" data-filter="walk">Погулять</button><button class="filter-chip" type="button" data-filter="photo">Фото-места</button>
+          </div>
+          <div class="section-row"><div><p class="eyebrow">ПОДОБРАНО ДЛЯ ВАС</p><h2>Места поблизости</h2></div><span class="result-count" id="result-count"></span></div>
+          <div class="place-list" id="place-list"></div>
+          <div class="place-detail" id="place-detail" hidden></div>
+        </section>
+
+        <section class="tab-panel" id="panel-route" aria-label="Маршрут на день" hidden>
+          <div class="route-overview"><span class="route-date-icon">☀</span><span><strong>Идеальный день в центре</strong><small id="route-summary">Начните с любимых мест и соберите свой план</small></span><button id="clear-route" class="text-button" type="button">Очистить</button></div>
+          <div class="route-stats" id="route-stats"></div>
+          <div id="route-list" class="route-list"></div>
+          <button id="find-route-places" class="soft-button full-button" type="button"><span>＋</span> Добавить место</button>
+          <p class="small-note">Время и расстояния ориентировочные. Между точками можно пройти пешком.</p>
+        </section>
+
+        <section class="tab-panel" id="panel-hotels" aria-label="Отели Санкт-Петербурга" hidden>
+          <div class="hotel-intro"><p class="eyebrow">ГДЕ ОСТАНОВИТЬСЯ</p><h2>Отели для вашей поездки</h2><p>Подборка в удобных районах. Цены указаны как пример и зависят от дат.</p></div>
+          <div class="budget-control"><div class="budget-label"><span>Бюджет за ночь</span><strong id="budget-value">до 25&nbsp;000 ₽</strong></div><input id="budget-slider" type="range" min="8000" max="35000" step="1000" value="25000" aria-label="Максимальная цена за ночь"></div>
+          <div class="hotel-list" id="hotel-list"></div>
+          <p class="small-note">Стоимость ориентировочная и не является предложением бронирования.</p>
+        </section>
+
+        <section class="tab-panel" id="panel-tips" aria-label="Советы путешественникам" hidden>
+          <div class="tips-intro"><p class="eyebrow">НЕОЧЕВИДНЫЙ ПЕТЕРБУРГ</p><h2>Советы местных</h2><p>Свайпните вправо, если хотите добавить место в маршрут.</p></div>
+          <div class="tip-stage" id="tip-stage" aria-live="polite"></div>
+          <div class="tip-actions"><button class="tip-button skip-button" id="tip-skip" type="button" aria-label="Пропустить">×</button><button class="tip-button undo-button" id="tip-undo" type="button" aria-label="Вернуть предыдущую карточку" disabled>↶</button><button class="tip-button like-button" id="tip-like" type="button" aria-label="Добавить в маршрут">♥</button></div>
+          <div class="tip-progress" id="tip-progress"></div>
+        </section>
+      </div>
+    </section>
+
+    <nav class="bottom-nav" aria-label="Главная навигация">
+      <button class="nav-item is-active" type="button" data-tab="map" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15"></path></svg><span>Карта</span></button>
+      <button class="nav-item" type="button" data-tab="route"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle><path d="M8.5 18h3a3 3 0 0 0 3-3V9a3 3 0 0 1 3-3"></path></svg><span>Маршрут</span><i class="nav-badge" id="route-badge" hidden></i></button>
+      <button class="nav-item" type="button" data-tab="hotels"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M2 21h20M7 7h2m4 0h2M7 11h2m4 0h2M7 15h2m4 0h2M10 21v-3a2 2 0 0 1 4 0v3"></path></svg><span>Отели</span></button>
+      <button class="nav-item" type="button" data-tab="tips"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6m-5 3h4m-2-20a7 7 0 0 0-4.4 12.5c.9.7 1.4 1.3 1.4 2.5h6c0-1.2.5-1.8 1.4-2.5A7 7 0 0 0 12 1z"></path></svg><span>Советы</span></button>
+    </nav>
+
+    <dialog class="booking-dialog" id="booking-dialog" aria-labelledby="booking-title">
+      <form method="dialog" class="dialog-close-form"><button class="icon-button close-dialog" aria-label="Закрыть">×</button></form>
+      <div class="dialog-icon">⌂</div><p class="eyebrow">ПЛАНИРОВАНИЕ ПОЕЗДКИ</p><h2 id="booking-title">Отель</h2><p id="booking-description"></p>
+      <div class="booking-facts" id="booking-facts"></div>
+      <div class="booking-notice">Здесь показаны примерные цены. Чтобы проверить доступность и оформить бронирование, свяжитесь с отелем.</div>
+      <button id="booking-confirm" class="primary-button full-button" type="button">Понятно</button>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
