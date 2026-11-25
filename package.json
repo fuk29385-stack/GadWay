@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "check": "node --check app.js && node --check data.js && node --check nearby-client.js && node --check lib/cors.js && node --check api/nominatim.js && node --check api/nearby.js"
+    "check": "node --check app.js && node --check data.js && node --check nearby-client.js && node --check lib/cors.js && node --check api/nominatim.js && node --check api/nearby.js && node --check api/reviews.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2"

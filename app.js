@@ -541,8 +541,8 @@
       document.querySelector("#sheet-title").textContent=place.name;
       document.querySelector("#sheet-summary").textContent=place.district+" · ★ "+place.rating;
       document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>'+escapeHtml(place.name)+'</span><span class="caption-separator">·</span><span>'+escapeHtml(place.district)+'</span>';
-      detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span></div><p>'+escapeHtml(place.distance)+'</p><div class="detail-navigation-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-place" data-id="'+escapeHtml(place.id)+'">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div></div>';
-      imageFallbacks(detail);updateSelectedMarker(place.id);return;
+      detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span></div><p>'+escapeHtml(place.distance)+'</p><div class="detail-navigation-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-place" data-id="'+escapeHtml(place.id)+'">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div><section class="reviews-section" aria-labelledby="reviews-heading"><div class="reviews-heading"><h3 id="reviews-heading">Отзывы</h3><div class="reviews-summary" data-reviews-summary>Загрузка…</div></div><div class="reviews-list" data-reviews-list aria-live="polite"></div><form class="review-form" data-review-form><h4>Оставить отзыв</h4><label class="review-label">Ваше имя<input name="author_name" maxlength="80" required placeholder="Как к вам обращаться"></label><fieldset class="rating-picker"><legend>Оценка</legend><div class="rating-stars">'+[1,2,3,4,5].map(n=>'<button class="rating-star" type="button" data-rating="'+n+'" aria-label="'+n+' из 5 звёзд" aria-pressed="false">★</button>').join('')+'</div><input type="hidden" name="rating" value="0"></fieldset><label class="review-label">Текст отзыва<textarea name="comment" maxlength="1000" required rows="4" placeholder="Поделитесь впечатлениями"></textarea><small class="review-counter">0 / 1000</small></label><p class="review-error" data-review-error role="alert" hidden></p><button class="primary-button full-button" type="submit" data-review-submit>Отправить отзыв</button></form></section></div>';
+      imageFallbacks(detail);loadPlaceReviews(place.id,detail);updateSelectedMarker(place.id);return;
     }
     sectionRow.hidden=false;chips.hidden=false;search.hidden=false;list.hidden=false;detail.hidden=true;
     document.querySelector("#sheet-kicker").textContent="ВАШ ГОРОДСКОЙ ГИД";
@@ -553,6 +553,19 @@
     document.querySelector("#result-count").textContent=visible.length+" мест";
     list.innerHTML=visible.length?visible.map(place=>'<article class="place-card" data-place-card="'+escapeHtml(place.id)+'"><img class="card-image" data-fallback src="'+escapeHtml(place.image)+'" alt="'+escapeHtml(place.name)+'" loading="lazy"><div class="card-copy"><p class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></p><h3 class="card-title">'+escapeHtml(place.name)+'</h3><p class="card-subtitle">'+escapeHtml(place.district)+' · '+escapeHtml(place.visit)+'</p><div class="card-actions"><button class="mini-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ В маршрут</button><span class="card-distance">Открыть ›</span></div></div></article>').join(""):'<p class="empty-message">Ничего не найдено. Попробуйте другое слово или фильтр.</p>';
     imageFallbacks(list);updateSelectedMarker(null);updateMapLayers();
+  }
+
+  async function loadPlaceReviews(placeId, detail=document.querySelector("#place-detail")) {
+    const summary=detail.querySelector("[data-reviews-summary]"), list=detail.querySelector("[data-reviews-list]");
+    if(!summary||!list)return;
+    try {
+      const response=await fetch("/api/reviews?placeId="+encodeURIComponent(placeId));
+      const payload=await response.json();
+      if(!response.ok)throw new Error(payload.error||"Не удалось загрузить отзывы");
+      const count=Number(payload.summary?.count)||0,average=Number(payload.summary?.average)||0;
+      summary.innerHTML='<strong>★ '+(count?average.toFixed(1).replace(".",","):"—")+'</strong><span>'+count+' '+(count===1?"отзыв":count>=2&&count<=4?"отзыва":"отзывов")+'</span>';
+      list.innerHTML=payload.reviews.length?payload.reviews.map(review=>'<article class="review-item"><div class="review-item-head"><strong>'+escapeHtml(review.author_name)+'</strong><time>'+escapeHtml(new Intl.DateTimeFormat("ru-RU",{dateStyle:"medium"}).format(new Date(review.created_at)))+'</time></div><div class="review-item-rating" aria-label="Оценка '+Number(review.rating)+' из 5">'+"★".repeat(Number(review.rating))+"☆".repeat(5-Number(review.rating))+'</div><p>'+escapeHtml(review.comment)+'</p></article>').join(""):'<p class="reviews-empty">Пока нет отзывов. Будьте первым!</p>';
+    } catch(error) { summary.textContent="Отзывы временно недоступны";list.innerHTML='<p class="reviews-empty">Не удалось загрузить отзывы.</p>'; }
   }
 
   function openPlace(id,focusMap) {
@@ -788,9 +801,25 @@
     const card=event.target.closest("[data-place-card]");if(card)openPlace(card.dataset.placeCard,true);
   });
   document.querySelector("#place-detail").addEventListener("click",event=>{
+    const star=event.target.closest("[data-rating]");if(star){const form=star.closest("[data-review-form]"),rating=Number(star.dataset.rating);form.elements.rating.value=String(rating);form.querySelectorAll("[data-rating]").forEach(button=>{button.setAttribute("aria-pressed",String(Number(button.dataset.rating)<=rating));button.classList.toggle("is-selected",Number(button.dataset.rating)<=rating);});return;}
     if(event.target.closest('[data-action="back-place"]')){selectedPlaceId=null;renderPlaces();return;}
     const route=event.target.closest('[data-action="navigate-to-place"]');if(route){const place=placeById.get(route.dataset.id);if(place)startRouteToPoint({coords:[place.lat,place.lon],name:place.name,label:place.name,address:place.district});return;}
     const add=event.target.closest('[data-action="add-place"]');if(add){if(addRouteStop(add.dataset.id))setTab("route");}
+  });
+  document.querySelector("#place-detail").addEventListener("input",event=>{if(event.target.name==="comment"){const counter=event.target.closest(".review-label").querySelector(".review-counter");counter.textContent=event.target.value.length+" / 1000";}});
+  document.querySelector("#place-detail").addEventListener("submit",async event=>{
+    const form=event.target.closest("[data-review-form]");if(!form)return;event.preventDefault();
+    const submit=form.querySelector("[data-review-submit]"),error=form.querySelector("[data-review-error]"),rating=Number(form.elements.rating.value);
+    error.hidden=true;error.textContent="";
+    if(!rating){error.textContent="Выберите оценку от 1 до 5 звёзд.";error.hidden=false;return;}
+    submit.disabled=true;submit.textContent="Отправляем…";
+    try {
+      const response=await fetch("/api/reviews",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({placeId:selectedPlaceId,author_name:form.elements.author_name.value,rating,comment:form.elements.comment.value})});
+      const payload=await response.json();if(!response.ok)throw new Error(payload.error||"Не удалось отправить отзыв");
+      form.reset();form.elements.rating.value="0";form.querySelectorAll("[data-rating]").forEach(button=>{button.classList.remove("is-selected");button.setAttribute("aria-pressed","false");});form.querySelector(".review-counter").textContent="0 / 1000";
+      await loadPlaceReviews(selectedPlaceId);showToast("Спасибо за отзыв!");
+    } catch(err) {error.textContent=err.message||"Не удалось отправить отзыв. Попробуйте ещё раз.";error.hidden=false;}
+    finally {submit.disabled=false;submit.textContent="Отправить отзыв";}
   });
   document.querySelector("#panel-map").addEventListener("click",event=>{
     const action=event.target.closest("[data-action]")?.dataset.action;

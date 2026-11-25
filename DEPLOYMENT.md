@@ -10,7 +10,7 @@ these API handlers; the current production domain is still on GitHub Pages.
    the API handlers under `api/`.
 2. In Vercel Project Settings > Environment Variables, set `PUBLIC_APP_URL` to
    `https://gadway.sitevo.kz`. Set `DATABASE_URL` to the Neon connection string
-   if the nearby places endpoint is needed. Apply these variables to Production.
+   for the nearby places and reviews endpoints. Apply these variables to Production.
 3. Add `gadway.sitevo.kz` to the Vercel project. Replace the GitHub Pages DNS
    records with the exact records Vercel shows, and remove the custom domain
    from GitHub Pages settings. Keep HTTPS enabled for the Vercel domain.
@@ -19,7 +19,8 @@ these API handlers; the current production domain is still on GitHub Pages.
    build is not required.
 5. Verify the homepage, then check `/api/nominatim?operation=search&q=Hermitage`.
    `/api/nearby?lng=30.3146&lat=59.9398` needs a configured database and a
-   populated `places` table.
+   populated `places` table. `/api/reviews?placeId=hermitage` checks the reviews
+   API; the reviews table is created automatically if it does not exist.
 
 For local development, copy `.env.example` to `.env` and fill in the values.
 Never commit `.env` or copy its secret values into Vercel's public variables.
