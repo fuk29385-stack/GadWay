@@ -1,5 +1,8 @@
-const APP_USER_AGENT = "GadWay/1.0 (https://gadway.sitevo.kz/)";
-const APP_REFERER = "https://gadway.sitevo.kz/";
+import { applyCors, getPublicAppOrigin } from "../lib/cors.js";
+
+const APP_ORIGIN = getPublicAppOrigin();
+const APP_USER_AGENT = `GadWay/1.0 (${APP_ORIGIN}/)`;
+const APP_REFERER = `${APP_ORIGIN}/`;
 const MIN_REQUEST_INTERVAL = 1100;
 
 let lastUpstreamRequestAt = 0;
@@ -32,6 +35,10 @@ function queueNominatimRequest(url) {
 }
 
 export default async function handler(request, response) {
+  if (!applyCors(request, response)) {
+    return response.status(403).json({ error: "Origin is not allowed" });
+  }
+  if (request.method === "OPTIONS") return response.status(204).end();
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     return response.status(405).json({ error: "Method not allowed" });

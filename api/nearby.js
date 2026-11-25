@@ -1,6 +1,18 @@
 import { neon } from "@neondatabase/serverless";
+import { applyCors } from "../lib/cors.js";
 
-const sql = neon(process.env.DATABASE_URL);
+let sql;
+
+function getSql() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    const error = new Error("DATABASE_URL is not configured");
+    error.code = "DATABASE_URL_MISSING";
+    throw error;
+  }
+  if (!sql) sql = neon(connectionString);
+  return sql;
+}
 
 /** Find places no more than 5 km from lng/lat. Runs on the server. */
 export async function findNearbyPlaces(lng, lat) {
@@ -11,7 +23,7 @@ export async function findNearbyPlaces(lng, lat) {
     throw new TypeError("lat must be a number from -90 to 90");
   }
 
-  return sql`
+  return getSql()`
     SELECT
       id,
       name,
@@ -29,9 +41,17 @@ export async function findNearbyPlaces(lng, lat) {
 
 // Vercel serverless function endpoint: GET /api/nearby?lng=...&lat=...
 export default async function handler(request, response) {
+  if (!applyCors(request, response)) {
+    return response.status(403).json({ error: "Origin is not allowed" });
+  }
+  if (request.method === "OPTIONS") return response.status(204).end();
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     return response.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (!process.env.DATABASE_URL) {
+    return response.status(503).json({ error: "Nearby places service is not configured" });
   }
 
   const lng = Number(request.query.lng);
