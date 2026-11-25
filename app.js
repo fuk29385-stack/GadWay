@@ -51,6 +51,7 @@
   customMapPlaces.forEach(point=>placeById.set(point.id,point));
   const storedRoute=readStorage("gadway-spb-route",null);
   let routeItems=Array.isArray(storedRoute)?storedRoute.filter(item=>item&&placeById.has(item.placeId)).map(item=>({placeId:item.placeId,time:/^\d{2}:\d{2}$/.test(item.time)?item.time:"10:00",visited:Boolean(item.visited)})):routeDefaults.map(item=>({...item}));
+  routeItems=routeItems.filter((item,index,array)=>array.findIndex(candidate=>candidate.placeId===item.placeId)===index);
   let activeTab="map";
   let filter="all";
   let query="";
@@ -75,6 +76,7 @@
   const geocodeCache=readStorage("gadway-geocode-cache",{});
   const routeCache=readStorage("gadway-osrm-cache",{});
   let toastTimer=0;
+  let wikipediaRequest=0;
   const markerById=new Map();
   let mapLibreMap=null;
   let userLocationMarker=null;
@@ -95,7 +97,21 @@
     window.clearTimeout(toastTimer);toastTimer=window.setTimeout(()=>toast.classList.remove("is-visible"),2600);
   }
   function imageFallbacks(root=document) {
-    root.querySelectorAll("img[data-fallback]").forEach(img=>{img.addEventListener("error",()=>{img.removeAttribute("src");img.classList.add("image-fallback");},{once:true});});
+    root.querySelectorAll("img[data-fallback]").forEach(img=>{
+      if (img.dataset.fallbackBound) return;
+      img.dataset.fallbackBound = "true";
+      img.addEventListener("error", () => {
+        if (img.dataset.fallbackTried) {
+          img.src = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400"><rect width="640" height="400" fill="#dce5dd"/><path d="M0 330 180 170l100 95 100-135 260 200v70H0z" fill="#b7c9bd"/><circle cx="465" cy="105" r="38" fill="#f4e5b6"/></svg>');
+          img.classList.add("image-fallback");
+          img.onerror = null;
+          return;
+        }
+        img.dataset.fallbackTried = "true";
+        const fallback = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=640&q=75";
+        if (img.src !== fallback) img.src = fallback;
+      });
+    });
   }
   function formatPrice(value) { return new Intl.NumberFormat("ru-RU").format(value)+" ₽"; }
   function pluralPlaces(value) { const n=value%100,unit=value%10;return n>10&&n<20?value+" мест":unit===1?value+" место":unit>1&&unit<5?value+" места":value+" мест"; }
@@ -431,6 +447,7 @@
     }
   }
   function initMap() {
+<<<<<<< HEAD
     if(!window.maplibregl){
       appShell.classList.add("map-offline");
       document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>Карта недоступна офлайн</span>';
@@ -441,6 +458,18 @@
       center:cityCenter,zoom:15,pitch:60,bearing:-17.6,
       attributionControl:false,dragRotate:true,pitchWithRotate:true,touchPitch:true,touchZoomRotate:true,
       cooperativeGestures:false,renderWorldCopies:false
+=======
+    if(!window.L){appShell.classList.add("map-offline");document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>Карта недоступна офлайн</span>';return;}
+    leafletMap=L.map("map",{zoomControl:false,attributionControl:false,preferCanvas:true}).setView(cityCenter,13);
+    const tiles=L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:20,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(leafletMap);
+    const mapFallback=document.querySelector("#map-fallback");
+    tiles.once("load",()=>{if(!appShell.classList.contains("map-tiles-error"))mapFallback.hidden=true;});
+    tiles.on("tileerror",()=>{appShell.classList.add("map-tiles-error");mapFallback.hidden=false;});
+    tiles.on("tileload",()=>{appShell.classList.remove("map-tiles-error");mapFallback.hidden=true;});
+    places.forEach(place=>{
+      const marker=L.marker([place.lat,place.lon],{icon:createPin(place.type,place.icon||iconFor(place.type),place.name),keyboard:true,title:place.name}).addTo(leafletMap);
+      marker.on("click",()=>openPlace(place.id,true));markerById.set(place.id,marker);
+>>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
     });
     mapLibreMap.on("style.load",applyDarkMapStyle);
     mapLibreMap.on("load",()=>{
@@ -525,8 +554,14 @@
       document.querySelector("#sheet-title").textContent=place.name;
       document.querySelector("#sheet-summary").textContent=place.district+" · ★ "+place.rating;
       document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>'+escapeHtml(place.name)+'</span><span class="caption-separator">·</span><span>'+escapeHtml(place.district)+'</span>';
+<<<<<<< HEAD
       detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span></div><p>'+escapeHtml(place.distance)+'</p><div class="detail-navigation-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-place" data-id="'+escapeHtml(place.id)+'">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div></div>';
       imageFallbacks(detail);updateSelectedMarker(place.id);return;
+=======
+      detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span></div><p>'+escapeHtml(place.distance)+'</p><button class="primary-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div>';
+      detail.querySelector(".detail-copy").insertAdjacentHTML("beforeend",'<div class="wiki-info" aria-live="polite"><span class="wiki-spinner" aria-hidden="true"></span><span>Загружаем дополнительные сведения…</span></div>');
+      imageFallbacks(detail);updateSelectedMarker(place.id);loadWikipediaSummary(place);return;
+>>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
     }
     sectionRow.hidden=false;chips.hidden=false;search.hidden=false;list.hidden=false;detail.hidden=true;
     document.querySelector("#sheet-kicker").textContent="ВАШ ГОРОДСКОЙ ГИД";
@@ -546,6 +581,7 @@
     setTab("map",false);renderPlaces();setSheetState("half");
     if(focusMap)flyTo([place.lat,place.lon],16);
   }
+<<<<<<< HEAD
   function openCustomMapPlace(place) {
     selectedMapPoint={token:Date.now()+Math.random(),coords:[place.lat,place.lon],name:place.name,category:place.shortType,address:place.district,description:place.description,status:"Точка из маршрута дня"};
     setSelectedPointMarker(selectedMapPoint.coords);selectedPlaceId=null;setTab("map",false);renderPlaces();setSheetState("half");flyTo(selectedMapPoint.coords,16);
@@ -559,6 +595,26 @@
   function closeMapPoint() {
     selectedMapPoint=null;if(selectedMapPointMarker){selectedMapPointMarker.remove();selectedMapPointMarker=null;}
     if(activeTab==="map")renderPlaces();else document.querySelector("#map-point-card").hidden=true;
+=======
+  async function loadWikipediaSummary(place) {
+    const requestId=++wikipediaRequest;
+    async function fetchSummary(language) {
+      const endpoint="https://"+language+".wikipedia.org/w/api.php?"+new URLSearchParams({action:"query",generator:"search",gsrsearch:place.name,gsrlimit:"1",prop:"extracts",exintro:"1",explaintext:"1",format:"json",origin:"*"});
+      try {
+        const response=await fetch(endpoint,{headers:{Accept:"application/json"}});
+        if(!response.ok)return "";
+        const payload=await response.json();
+        const page=Object.values(payload?.query?.pages||{})[0];
+        return typeof page?.extract==="string"?page.extract.trim().slice(0,700):"";
+      } catch { return ""; }
+    }
+    let summary=await fetchSummary("ru");
+    if(!summary)summary=await fetchSummary("en");
+    if(requestId!==wikipediaRequest||selectedPlaceId!==place.id)return;
+    const target=document.querySelector("#place-detail .wiki-info");
+    if(!target)return;
+    target.innerHTML=summary?'<strong>Из Википедии</strong><p>'+escapeHtml(summary)+'</p>':'<span>Дополнительные сведения сейчас недоступны.</span>';
+>>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
   }
   function addRouteStop(id) {
     if(!placeById.has(id))return false;
@@ -583,6 +639,7 @@
   function renderRoute() {
     const valid=routeItems.filter(item=>placeById.has(item.placeId));
     routeItems=valid;
+    persistRoute();
     const list=document.querySelector("#route-list");
     document.querySelector("#route-summary").textContent=valid.length?pluralPlaces(valid.length)+" · маршрут можно менять":"Начните с любимых мест и соберите свой план";
     if(!valid.length){
@@ -602,7 +659,7 @@
       const place=placeById.get(item.placeId),leg=legs[index];
       return '<article class="route-stop '+(item.visited?'is-visited':'')+'" data-route-index="'+index+'"><label class="stop-marker" title="'+(item.visited?'Посещено':'Не посещено')+'"><input class="stop-check" type="checkbox" data-action="visit" data-index="'+index+'" '+(item.visited?'checked':'')+' aria-label="Отметить как посещённое место: '+escapeHtml(place.name)+'"><span>'+(index+1)+'</span></label><div class="stop-copy"><span class="stop-time">'+escapeTime(item.time)+'</span><strong>'+escapeHtml(place.name)+'</strong><small>'+escapeHtml(place.district)+(leg?' · далее '+leg.km.toFixed(1)+' км, '+leg.minutes+' мин пешком':' · последняя точка маршрута')+'</small></div><div class="stop-tools"><button type="button" data-action="move-up" data-index="'+index+'" aria-label="Переместить выше" '+(index===0?'disabled':'')+'>↑</button><button type="button" data-action="move-down" data-index="'+index+'" aria-label="Переместить ниже" '+(index===valid.length-1?'disabled':'')+'>↓</button><button type="button" data-action="remove-stop" data-index="'+index+'" aria-label="Удалить '+escapeHtml(place.name)+'">×</button></div></article>';
     }).join("");
-    persistRoute();updateMapLayers();
+    updateMapLayers();
   }
   function updateBadge() {
     const badge=document.querySelector("#route-badge");badge.hidden=routeItems.length===0;badge.title=routeItems.length+" места в маршруте";
@@ -651,15 +708,16 @@
   function decideTip(liked) {
     if(tipIndex>=tips.length)return;
     const tip=tips[tipIndex],wasInRoute=routeItems.some(item=>item.placeId===tip.placeId);
-    tipHistory.push({index:tipIndex,liked,wasInRoute,tipId:tip.id});
-    if(liked&&!wasInRoute){const h=10+routeItems.length*2;routeItems.push({placeId:tip.placeId,time:String(Math.min(20,h)).padStart(2,"0")+":00",visited:false});persistRoute();renderRoute();updateBadge();}
+    const historyEntry={index:tipIndex,liked,wasInRoute,tipId:tip.id};
+    if(liked&&!wasInRoute){const h=10+routeItems.length*2;historyEntry.routeItem={placeId:tip.placeId,time:String(Math.min(20,h)).padStart(2,"0")+":00",visited:false};routeItems.push(historyEntry.routeItem);persistRoute();renderRoute();updateBadge();}
+    tipHistory.push(historyEntry);
     tipIndex++;renderTips();
     if(liked)showToast(wasInRoute?"Это место уже есть в маршруте":"«"+placeById.get(tip.placeId).name+"» добавлено в маршрут");
   }
   function undoTip() {
     const last=tipHistory.pop();if(!last)return;
     tipIndex=last.index;
-    if(last.liked&&!last.wasInRoute){const index=routeItems.findIndex(item=>item.placeId===tips[last.index].placeId);if(index!==-1)routeItems.splice(index,1);persistRoute();renderRoute();updateBadge();}
+    if(last.routeItem){const index=routeItems.indexOf(last.routeItem);if(index!==-1){routeItems.splice(index,1);persistRoute();renderRoute();updateBadge();}}
     renderTips();showToast("Вернули предыдущую карточку");
   }
   function restartTips() { tipIndex=0;tipHistory=[];renderTips(); }
@@ -683,12 +741,18 @@
     sheetScroll.scrollTop=0;
     if(openSheet)setSheetState("half");
     updateMapLayers();
+<<<<<<< HEAD
     if(mapLibreMap)window.setTimeout(()=>mapLibreMap&&mapLibreMap.resize(),100);
+=======
+    if(leafletMap)window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>leafletMap&&leafletMap.invalidateSize({pan:false})));
+>>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
   }
 
   function visibleFor(state) {
     const height=appShell.clientHeight||window.innerHeight;
-    return state==="peek"?Math.round(Math.max(124,Math.min(146,height*.17))):state==="half"?Math.round(height*.53):Math.round(height*.82);
+    const full=Math.max(280,height-Math.max(74,parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-height"))||76));
+    const peek=Math.min(146,Math.max(112,height*.17));
+    return state==="peek"?Math.round(peek):state==="half"?Math.round(Math.min(full,Math.max(peek+50,height*.53))):Math.round(full);
   }
   function setSheetState(state) {
     sheet.dataset.state=state;
@@ -702,28 +766,56 @@
     return options.reduce((best,item)=>Math.abs(item.height-visible)<Math.abs(best.height-visible)?item:best).name;
   }
   const handle=document.querySelector("#sheet-handle");
+  const sheetHeading=document.querySelector(".sheet-heading");
   let sheetDrag=null;
   let suppressHandleClick=false;
-  handle.addEventListener("pointerdown",event=>{
+  function startSheetDrag(event, fromContent=false) {
     if(event.button!==undefined&&event.button!==0)return;
+    if(fromContent && sheetScroll.scrollTop>0)return;
+    if(fromContent && event.target.closest("button,a,input,select,textarea,[data-action]"))return;
     sheetDrag={startY:event.clientY,lastY:event.clientY,lastTime:performance.now(),startVisible:visibleFor(sheet.dataset.state),velocity:0};
-    sheet.classList.add("is-dragging");handle.setPointerCapture(event.pointerId);event.preventDefault();
-  });
-  handle.addEventListener("pointermove",event=>{
+    sheetDrag.pointerId=event.pointerId;
+    sheetDrag.target=event.currentTarget;
+    sheetDrag.fromContent=fromContent;
+    sheetDrag.moved=false;
+    if(!fromContent){
+      sheet.classList.add("is-dragging");
+      try { event.currentTarget.setPointerCapture(event.pointerId); } catch {}
+      event.preventDefault();
+    }
+  }
+  handle.addEventListener("pointerdown",event=>startSheetDrag(event));
+  sheetHeading.addEventListener("pointerdown",event=>{ if(!window.matchMedia("(min-width: 900px)").matches&&!event.target.closest("button,a,input"))startSheetDrag(event); });
+  sheetScroll.addEventListener("pointerdown",event=>{ if(sheetScroll.scrollTop===0)startSheetDrag(event,true); },{passive:true});
+  function moveSheetDrag(event){
     if(!sheetDrag)return;
     const now=performance.now(),delta=event.clientY-sheetDrag.startY;
+    if(sheetDrag.fromContent && delta< -5){sheetDrag=null;sheet.classList.remove("is-dragging");return;}
+    if(sheetDrag.fromContent && delta>5){
+      event.preventDefault();
+      if(!sheetDrag.moved){
+        sheetDrag.moved=true;
+        sheet.classList.add("is-dragging");
+        try { sheetScroll.setPointerCapture(event.pointerId); } catch {}
+      }
+    }
+    if(sheetDrag.fromContent && !sheetDrag.moved)return;
     if(Math.abs(delta)>6)suppressHandleClick=true;
     const next=Math.max(visibleFor("peek"),Math.min(visibleFor("full"),sheetDrag.startVisible-delta));
     sheet.style.setProperty("--sheet-visible",next+"px");
     sheetDrag.velocity=(event.clientY-sheetDrag.lastY)/Math.max(1,now-sheetDrag.lastTime);
     sheetDrag.lastY=event.clientY;sheetDrag.lastTime=now;
-  });
+  }
+  handle.addEventListener("pointermove",moveSheetDrag);
+  sheetHeading.addEventListener("pointermove",moveSheetDrag);
+  sheetScroll.addEventListener("pointermove",moveSheetDrag,{passive:false});
   function finishSheetDrag(){
     if(!sheetDrag)return;
+    if(sheetDrag.fromContent&&!sheetDrag.moved){sheetDrag=null;return;}
     const visible=parseFloat(getComputedStyle(sheet).getPropertyValue("--sheet-visible"))||visibleFor(sheet.dataset.state);
     const state=nearestSheetState(visible,sheetDrag.velocity);sheetDrag=null;sheet.classList.remove("is-dragging");setSheetState(state);
   }
-  handle.addEventListener("pointerup",finishSheetDrag);handle.addEventListener("pointercancel",()=>{finishSheetDrag();suppressHandleClick=false;});
+  [handle,sheetHeading,sheetScroll].forEach(target=>{target.addEventListener("pointerup",finishSheetDrag);target.addEventListener("pointercancel",()=>{finishSheetDrag();suppressHandleClick=false;});});
   handle.addEventListener("click",()=>{if(suppressHandleClick){suppressHandleClick=false;return;}if(sheetDrag)return;const state=sheet.dataset.state;setSheetState(state==="peek"?"half":state==="half"?"full":"peek");});
 
   document.querySelectorAll(".nav-item").forEach(button=>button.addEventListener("click",()=>setTab(button.dataset.tab)));
@@ -792,8 +884,12 @@
     const top=document.querySelector(".tip-card.is-top");if(!top)return;
     tipDismissing=true;
     top.style.transition="transform .36s cubic-bezier(.3,.8,.2,1), opacity .32s ease";
+    let completed=false;
+    const finish=()=>{if(completed)return;completed=true;top.removeEventListener("transitionend",onEnd);decideTip(liked);tipDismissing=false;};
+    const onEnd=event=>{if(event.target===top&&event.propertyName==="transform")finish();};
+    top.addEventListener("transitionend",onEnd);
     top.style.transform="translate3d("+(liked?"130%":"-130%")+", 0, 0) rotate("+(liked?"18deg":"-18deg")+")";top.style.opacity="0";
-    window.setTimeout(()=>{decideTip(liked);tipDismissing=false;},180);
+    window.setTimeout(finish,420);
   }
   let tipDrag=null;
   const tipStage=document.querySelector("#tip-stage");
@@ -809,7 +905,7 @@
   });
   function finishTipDrag(){
     if(!tipDrag)return;const dx=tipDrag.lastX-tipDrag.startX,card=tipDrag.card;tipDrag=null;
-    if(Math.abs(dx)>90){decideTip(dx>0);return;}
+    if(Math.abs(dx)>90){dismissTip(dx>0);return;}
     card.style.transition="transform .36s cubic-bezier(.2,1,.3,1)";card.style.transform="";card.classList.remove("drag-left","drag-right");
   }
   tipStage.addEventListener("pointerup",finishTipDrag);tipStage.addEventListener("pointercancel",finishTipDrag);
@@ -828,8 +924,18 @@
     else showToast("Скопируйте ссылку из адресной строки");
   });
 
+<<<<<<< HEAD
   window.addEventListener("resize",()=>{setSheetState(sheet.dataset.state);if(mapLibreMap)mapLibreMap.resize();});
   window.addEventListener("keydown",event=>{if(event.key==="Escape"&&selectedMapPoint)closeMapPoint();else if(event.key==="Escape"&&selectedPlaceId){selectedPlaceId=null;renderPlaces();}});
+=======
+  window.addEventListener("resize",()=>{setSheetState(sheet.dataset.state);if(leafletMap)leafletMap.invalidateSize({pan:false});});
+  if("ResizeObserver" in window){
+    const mapObserver=new ResizeObserver(()=>{if(leafletMap)leafletMap.invalidateSize({pan:false});});
+    mapObserver.observe(document.querySelector("#map"));
+    mapObserver.observe(appShell);
+  }
+  window.addEventListener("keydown",event=>{if(event.key==="Escape"&&selectedPlaceId){selectedPlaceId=null;renderPlaces();}});
+>>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
 
   function init() {
     initMap();
