@@ -4,17 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d1117">
-  <meta name="description" content="Карманный путеводитель по Санкт-Петербургу: места, дневной маршрут, отели и советы. Откройте город в своём темпе.">
-  <title>GadWay — Петербург рядом</title>
+  <meta name="description" content="Исследуйте реальные места рядом, открывайте карточки объектов OpenStreetMap и собирайте маршрут в GadWay.">
+  <title>GadWay — места рядом</title>
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="preconnect" href="https://tiles.openfreemap.org">
   <link rel="preconnect" href="https://routing.openstreetmap.de" crossorigin>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="figma-theme.css">
 </head>
 <body>
   <div id="app-shell">
-    <div id="map" aria-label="Карта Санкт-Петербурга"></div>
+    <div id="map" aria-label="Карта"></div>
     <div id="map-fallback" aria-hidden="true">
       <div class="fallback-river"></div><div class="fallback-road road-one"></div><div class="fallback-road road-two"></div>
       <span class="fallback-label label-center">ДВОРЦОВАЯ ПЛОЩАДЬ</span><span class="fallback-label label-neva">НЕВА</span>
@@ -22,12 +24,12 @@
     <div class="map-vignette" aria-hidden="true"></div>
 
     <header class="topbar">
-      <div class="brand-pill"><span class="brand-mark">g</span><span><strong>GadWay</strong><small>ПЕТЕРБУРГ</small></span></div>
+      <div class="brand-pill"><span class="brand-mark">g</span><span><strong>GadWay</strong><small id="brand-city">ГОРОД РЯДОМ С ВАМИ</small></span></div>
       <div class="topbar-actions">
         <button class="icon-button" id="locate-button" type="button" aria-label="Моё местоположение" title="Моё местоположение">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.2"></circle><circle cx="12" cy="12" r="2.2"></circle><path d="M12 2v2.5M22 12h-2.5M12 22v-2.5M2 12h2.5"></path></svg>
         </button>
-        <div class="weather-pill" id="city-pill" aria-label="Город путеводителя"><span class="weather-dot"></span><span>Санкт-Петербург</span></div>
+        <div class="weather-pill" id="city-pill" aria-label="Город путеводителя"><span class="weather-dot"></span><span id="city-name">Рядом с вами</span></div>
       </div>
     </header>
 
@@ -35,14 +37,14 @@
     <div class="map-zoom-controls" aria-label="Управление масштабом карты">
       <button id="zoom-in" type="button" aria-label="Приблизить">+</button><button id="zoom-out" type="button" aria-label="Отдалить">−</button><button id="map-mode" type="button" aria-pressed="true" aria-label="Переключить режим 2D или 3D">3D</button>
     </div>
-    <div class="map-credit">© OpenMapTiles · © OpenStreetMap contributors · OpenFreeMap</div>
+    <div class="map-credit">© OpenStreetMap contributors · © OpenFreeMap · POI: Overpass API</div>
 
     <section class="bottom-sheet" id="bottom-sheet" aria-label="Панель путеводителя" data-state="half">
       <button class="sheet-handle-area" id="sheet-handle" type="button" aria-label="Переместить панель. Нажмите, чтобы изменить её высоту" aria-controls="sheet-content">
         <span class="sheet-handle"></span>
       </button>
       <div class="sheet-heading">
-        <div class="sheet-heading-copy"><p class="sheet-kicker" id="sheet-kicker">ВАШ ГОРОДСКОЙ ГИД</p><h1 id="sheet-title">Исследуйте Петербург</h1><p class="sheet-summary" id="sheet-summary">Красивые места, прогулки и маленькие открытия рядом.</p></div>
+        <div class="sheet-heading-copy"><p class="sheet-kicker" id="sheet-kicker">ВАШ ГОРОДСКОЙ ГИД</p><h1 id="sheet-title">Места рядом</h1><p class="sheet-summary" id="sheet-summary">Реальные места и объекты OpenStreetMap рядом с вами.</p></div>
         <button class="sheet-action" id="sheet-action" type="button" aria-label="Поделиться" title="Поделиться">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.5-4.4M8.2 13.2l7.5 4.4"></path></svg>
         </button>
@@ -82,7 +84,7 @@
           <p class="small-note">Время и расстояния ориентировочные. Между точками можно пройти пешком.</p>
         </section>
 
-        <section class="tab-panel" id="panel-hotels" aria-label="Отели Санкт-Петербурга" hidden>
+        <section class="tab-panel" id="panel-hotels" aria-label="Подборка отелей" hidden>
           <div class="hotel-intro"><p class="eyebrow">ГДЕ ОСТАНОВИТЬСЯ</p><h2>Отели для вашей поездки</h2><p>Подборка в удобных районах. Цены указаны как пример и зависят от дат.</p></div>
           <div class="budget-control"><div class="budget-label"><span>Бюджет за ночь</span><strong id="budget-value">до 25&nbsp;000 ₽</strong></div><input id="budget-slider" type="range" min="8000" max="35000" step="1000" value="25000" aria-label="Максимальная цена за ночь"></div>
           <div class="hotel-list" id="hotel-list"></div>
@@ -116,6 +118,9 @@
   </div>
 
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script src="supabase-config.js"></script>
+  <script src="reviews.js"></script>
+  <script src="osm.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

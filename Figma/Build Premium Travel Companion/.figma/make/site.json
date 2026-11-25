@@ -1,0 +1,10 @@
+{
+  "description": "Explore unfamiliar cities with an interactive map, curated places, custom routes, travel services, and a daily itinerary generator—all in one personal guide.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

@@ -2,7 +2,7 @@
   "use strict";
 
   const cityCenter = [30.3141, 59.9386];
-  const places = [
+  let places = [
     {id:"hermitage",name:"Государственный Эрмитаж",type:"culture",icon:"🏛️",shortType:"Музей",district:"Дворцовая набережная",lat:59.9398,lon:30.3146,rating:"4,9",hours:"Вт, чт–вс · примерно 11:00–18:00",visit:"2–3 часа",distance:"Главная музейная коллекция города",image:"https://images.unsplash.com/photo-1566127444979-b3d2b654e3d7?auto=format&fit=crop&w=600&q=80",description:"Зимний дворец на берегу Невы и одна из крупнейших художественных коллекций мира. На осмотр стоит заложить несколько часов; расписание и входные билеты лучше проверить перед визитом."},
     {id:"isaac",name:"Исаакиевский собор",type:"photo",icon:"📸",shortType:"Архитектура",district:"Исаакиевская площадь",lat:59.9321,lon:30.3061,rating:"4,9",hours:"Ежедневно · расписание зависит от сезона",visit:"1–1,5 часа",distance:"Колоннада открывает вид на центр Петербурга",image:"https://images.unsplash.com/photo-1511765224389-37f0e77cf0eb?auto=format&fit=crop&w=600&q=80",description:"Монументальный собор на Исаакиевской площади. Если подняться на колоннаду, можно увидеть исторический центр с высоты. Часы работы и доступ на колоннаду уточняйте заранее."},
     {id:"new-holland",name:"Остров Новая Голландия",type:"walk",icon:"🌿",shortType:"Прогулка",district:"Адмиралтейский район",lat:59.9293,lon:30.2917,rating:"4,8",hours:"Ежедневно · общественные пространства",visit:"1–2 часа",distance:"Парк, архитектура и места для отдыха",image:"https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=600&q=80",description:"Исторический остров с кирпичной аркой, зелёным газоном и культурными площадками. Хорошее место, чтобы передохнуть между прогулками по центру."},
@@ -49,6 +49,8 @@
   }
   const customMapPlaces=readStorage("gadway-spb-custom-points",[]).filter(point=>point&&typeof point.id==="string"&&point.id.startsWith("map-point-")&&Number.isFinite(point.lat)&&Number.isFinite(point.lon)).map(point=>({id:point.id,name:String(point.name||"Точка на карте").slice(0,120),type:"custom",icon:"📍",shortType:String(point.shortType||"Точка на карте").slice(0,60),district:String(point.district||"Санкт-Петербург").slice(0,160),lat:point.lat,lon:point.lon,rating:"—",hours:"Точка добавлена с карты",visit:"По плану",distance:"Место, отмеченное на карте",image:"",description:String(point.description||"Точка на карте Санкт-Петербурга").slice(0,300)}));
   customMapPlaces.forEach(point=>placeById.set(point.id,point));
+  const savedOsmPlaces=readStorage("gadway-osm-places",[]).filter(place=>place&&typeof place.id==="string"&&place.id.startsWith("osm:")&&Number.isFinite(place.lat)&&Number.isFinite(place.lon));
+  savedOsmPlaces.forEach(place=>{if(!placeById.has(place.id)){place.provider="osm";places.push(place);placeById.set(place.id,place);}});
   const storedRoute=readStorage("gadway-spb-route",null);
   let routeItems=Array.isArray(storedRoute)?storedRoute.filter(item=>item&&placeById.has(item.placeId)).map(item=>({placeId:item.placeId,time:/^\d{2}:\d{2}$/.test(item.time)?item.time:"10:00",visited:Boolean(item.visited)})):routeDefaults.map(item=>({...item}));
   routeItems=routeItems.filter((item,index,array)=>array.findIndex(candidate=>candidate.placeId===item.placeId)===index);
@@ -56,24 +58,23 @@
   let filter="all";
   let query="";
   let selectedPlaceId=null;
+  let placeSelectionRequestId=0;
   let selectedHotelId=null;
   let maxBudget=25000;
   let tipIndex=0;
   let tipHistory=[];
   let currentUserLocation=null;
+  let currentCityName="Рядом с вами";
   let selectedMapPoint=null;
   let selectedMapPointMarker=null;
   let navigationMarkers=[];
   let navigationRoute=null;
   let navigationMode="foot";
   let navigationRequestId=0;
-  let nominatimQueue=Promise.resolve();
-  let lastNominatimRequestAt=0;
   let osrmQueue=Promise.resolve();
   let lastOsrmRequestAt=0;
   let routeOriginSelection=null;
   let routeDestinationSelection=null;
-  const geocodeCache=readStorage("gadway-geocode-cache",{});
   const routeCache=readStorage("gadway-osrm-cache",{});
   let toastTimer=0;
   let wikipediaRequest=0;
@@ -84,9 +85,14 @@
   const overpassCache=new Map();
   let overpassTimer=0;
   let overpassController=null;
+  let lastOverpassCenter=null;
+  let activeNearbyCenter=cityCenter;
+  let cityRequestId=0;
+  const poiPhotoCache=new Map();
   let searchTimer=0;
   let searchController=null;
   const photonCache=new Map();
+  let mapSearchResults=[];
   const appShell=document.querySelector("#app-shell");
   const sheet=document.querySelector("#bottom-sheet");
   const sheetScroll=document.querySelector("#sheet-content");
@@ -124,7 +130,7 @@
   function escapeTime(value) { return escapeHtml(value); }
   function filteredPlaces() {
     const normalized=query.trim().toLocaleLowerCase("ru");
-    return places.filter(place=>(filter==="all"||place.type===filter)&&(!normalized||(place.name+" "+place.district+" "+place.description+" "+place.shortType).toLocaleLowerCase("ru").includes(normalized)));
+    return places.filter(place=>distanceKm([place.lat,place.lon],activeNearbyCenter)<4&&(filter==="all"||place.type===filter)&&(!normalized||(place.name+" "+place.district+" "+place.description+" "+place.shortType+" "+Object.values(place.tags||{}).join(" ")).toLocaleLowerCase("ru").includes(normalized)));
   }
 
   function iconFor(type) { return type==="hotel"?"⌂":type==="food"?"☕":"✦"; }
@@ -136,11 +142,58 @@
     host.append(pin);return host;
   }
   function addMapMarker(id,coords,type,icon,label,onClick) {
+    const existing=markerById.get(id);if(existing){existing.remove();markerById.delete(id);}
     const marker=new maplibregl.Marker({element:createPin(type,icon,label),anchor:"bottom"})
       .setLngLat(coords).addTo(mapLibreMap);
     marker.__gadwayVisible=true;
     marker.getElement().addEventListener("click",event=>{event.stopPropagation();onClick();});
     markerById.set(id,marker);
+  }
+  function registerOsmPlace(element, addMarker=true) {
+    const place=window.GadWayOSM.toPlace(element),existing=placeById.get(place.id);
+    if(existing)Object.assign(existing,place);else{places.push(place);placeById.set(place.id,place);}
+    if(addMarker&&mapLibreMap&&mapLibreMap.isStyleLoaded()&&Number.isFinite(place.lat)&&Number.isFinite(place.lon)){
+      addMapMarker(place.id,[place.lon,place.lat],place.type,place.icon,place.name,()=>openPlace(place.id,true));
+    }
+    return existing||place;
+  }
+  function persistOsmPlaces(){saveStorage("gadway-osm-places",places.filter(item=>item.provider==="osm").slice(-2000));}
+  async function loadNearbyOsmPlaces(coords, force=false) {
+    if(!window.GadWayOSM||!coords?.every(Number.isFinite))return;
+    activeNearbyCenter=coords;
+    const key=coords.map(v=>v.toFixed(3)).join(":");
+    const prior=overpassCache.get(key);
+    if(!force&&prior&&Date.now()-prior.at<5*60*1000){if(activeTab==="map"&&!selectedPlaceId&&!selectedMapPoint)renderPlaces();return;}
+    try{
+      const elements=await window.GadWayOSM.nearby(coords[0],coords[1],3500,null);
+      overpassCache.set(key,{at:Date.now(),ids:elements.map(window.GadWayOSM.idFor)});
+      const added=elements.map(el=>registerOsmPlace(el,false));
+      persistOsmPlaces();
+      if(activeTab==="map"&&!selectedPlaceId&&!selectedMapPoint){renderPlaces();}
+      document.querySelector("#result-count").textContent=added.length?added.length+" реальных мест поблизости":"Реальные места рядом не найдены";
+    }catch(error){console.warn("Nearby OpenStreetMap places could not be loaded",error);}
+  }
+  async function updateCityForLocation(coords) {
+    const requestId=++cityRequestId;
+    try{
+      // A rounded position is enough to name the city and avoids sending a precise device location.
+      const result=await window.GadWayOSM.reverse(Number(coords[0].toFixed(2)),Number(coords[1].toFixed(2)));
+      if(requestId!==cityRequestId)return;
+      const city=window.GadWayOSM.cityName(result);
+      currentCityName=city;
+      document.querySelector("#city-name").textContent=city;
+      document.querySelector("#brand-city").textContent=city.toLocaleUpperCase("ru");
+      document.querySelector("#city-pill").setAttribute("aria-label","Город путеводителя: "+city);
+      if(!selectedPlaceId&&activeTab==="map")document.querySelector("#sheet-title").textContent="Места рядом · "+city;
+    }catch(error){console.info("Could not determine current city",error.message);}
+  }
+  function scheduleNearbyAtMapCenter() {
+    if(!mapLibreMap||mapLibreMap.getZoom()<12)return;
+    const center=mapLibreMap.getCenter(),coords=[center.lat,center.lng];
+    if(lastOverpassCenter&&window.GadWayOSM.distanceMeters(lastOverpassCenter,coords)<900)return;
+    lastOverpassCenter=coords;
+    window.clearTimeout(overpassTimer);
+    overpassTimer=window.setTimeout(()=>loadNearbyOsmPlaces(coords),1200);
   }
   function applyDarkMapStyle() {
     if(!mapLibreMap)return;
@@ -202,15 +255,6 @@
     const p=feature&&feature.properties||{};
     return p["name:ru"]||p.name_ru||p.name||p["name:latin"]||p.ref||"";
   }
-  function featureCategory(feature) {
-    if(!feature)return "Точка на карте";
-    const layer=feature.layer&&feature.layer.id||"",sourceLayer=feature.sourceLayer||"",kind=feature.properties&&(feature.properties.class||feature.properties.subclass||feature.properties.type)||"";
-    if(layer.startsWith("poi")||sourceLayer==="poi")return "Достопримечательность · "+String(kind||"место").replace(/_/g," ");
-    if(sourceLayer==="building"||layer.includes("building"))return "Здание";
-    if(sourceLayer==="transportation_name"||layer.includes("highway-name"))return "Улица";
-    if(sourceLayer==="park"||sourceLayer==="landcover")return "Парк или зелёная зона";
-    return "Место на карте";
-  }
   function nearestMapFeature(point) {
     if(!mapLibreMap||!mapLibreMap.isStyleLoaded())return null;
     let features=[];
@@ -220,6 +264,34 @@
       ||candidates.find(feature=>(feature.sourceLayer==="building"||feature.layer.id.includes("building"))&&featureName(feature))
       ||candidates.find(feature=>feature.layer.type==="symbol"&&featureName(feature))
       ||candidates.find(feature=>featureName(feature))||null;
+  }
+  function mapFeaturePlace(feature,coords) {
+    if(!feature||!feature.layer?.id?.toLowerCase().includes("poi"))return null;
+    const name=featureName(feature);if(!name)return null;
+    const p=feature.properties||{},type=["node","way","relation"].includes(String(p.osm_type||"").toLowerCase())?String(p.osm_type).toLowerCase():"";
+    const osmId=type?(p.osm_id??p.id):null;
+    const tags={...(p.tags&&typeof p.tags==="object"?p.tags:{}),name};
+    const key=String(p.class||p.subclass||p.type||"").toLowerCase();
+    if(key){
+      const category=window.GadWayOSM.category({[p.class||"amenity"]:p.subclass||p.type||p.class});
+      tags[p.class||"amenity"]=p.subclass||p.type||p.class;
+      if(category.label==="Место")tags.amenity="attraction";
+    }else tags.amenity="attraction";
+    return {type:type||undefined,id:osmId??undefined,lat:coords[0],lon:coords[1],tags};
+  }
+  function coordinatePlace(coords,name="Точка на карте",tags={}) {
+    const lat=Number(coords[0]),lon=Number(coords[1]);
+    const normalized={name,...tags};
+    return registerOsmPlace({lat,lon,tags:normalized},false);
+  }
+  function enrichMapPlace(place,coords) {
+    const currentId=place.id;
+    window.GadWayOSM.findAt(coords[0],coords[1],25).then(element=>{
+      if(!element||selectedPlaceId!==currentId)return;
+      const realPlace=registerOsmPlace(element,false);
+      if(realPlace.id===currentId)return;
+      persistOsmPlaces();selectedPlaceId=realPlace.id;renderPlaces();
+    }).catch(error=>console.info("Optional nearby OSM lookup failed; keeping coordinate place",error.message));
   }
   function setSelectedPointMarker(coords) {
     if(selectedMapPointMarker)selectedMapPointMarker.remove();
@@ -234,32 +306,10 @@
     if(!selectedMapPoint){card.hidden=true;return;}
     const point=selectedMapPoint,lat=point.coords[0],lon=point.coords[1];
     card.hidden=false;
-    card.innerHTML='<div class="map-point-card-head"><div><span class="map-point-category">'+escapeHtml(point.category)+'</span><h2>'+escapeHtml(point.name)+'</h2></div><button class="detail-back" type="button" data-action="close-map-point" aria-label="Закрыть точку">×</button></div><p class="map-point-address">'+escapeHtml(point.address||point.status||"Определяем адрес…")+'</p><p class="map-point-coordinates">'+lat.toFixed(5)+", "+lon.toFixed(5)+'</p><p class="map-point-description">'+escapeHtml(point.description||point.status||"Ищем ближайший адрес в OpenStreetMap…")+'</p><div class="map-point-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-point">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-map-point-to-day">Добавить в маршрут дня</button></div>';
+    card.innerHTML='<div class="map-point-card-head"><div><span class="map-point-category">'+escapeHtml(point.category)+'</span><h2>'+escapeHtml(point.name)+'</h2></div><button class="detail-back" type="button" data-action="close-map-point" aria-label="Закрыть точку">×</button></div><p class="map-point-address">'+escapeHtml(point.address||point.status||"Координаты точки")+'</p><p class="map-point-coordinates">'+lat.toFixed(5)+", "+lon.toFixed(5)+'</p><p class="map-point-description">'+escapeHtml(point.description||point.status||"Здесь не найден объект OpenStreetMap.")+'</p><div class="map-point-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-point">Построить маршрут</button>'+(point.isPoi===false?"":'<button class="soft-button full-button" type="button" data-action="add-map-point-to-day">Добавить в маршрут дня</button>')+'</div>';
   }
   function pointCaption(point) {
     document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>'+escapeHtml(point.name)+'</span><span class="caption-separator">·</span><span>'+escapeHtml(point.category)+'</span>';
-  }
-  async function nominatimJson(url,shouldRun=()=>true) {
-    if(Object.prototype.hasOwnProperty.call(geocodeCache,url))return geocodeCache[url];
-    const task=nominatimQueue.then(async()=>{
-      let sharedLastRequest=0;try{sharedLastRequest=Number(localStorage.getItem("gadway-last-nominatim-request"))||0;}catch{}
-      lastNominatimRequestAt=Math.max(lastNominatimRequestAt,sharedLastRequest);
-      const pause=Math.max(0,1100-(Date.now()-lastNominatimRequestAt));
-      if(pause)await new Promise(resolve=>window.setTimeout(resolve,pause));
-      if(!shouldRun())return null;
-      lastNominatimRequestAt=Date.now();try{localStorage.setItem("gadway-last-nominatim-request",String(lastNominatimRequestAt));}catch{}
-      const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),10000);
-      try{
-        const options={signal:controller.signal,headers:{Accept:"application/json"},referrerPolicy:"origin"};
-        if(location.origin&&location.origin!=="null")options.referrer=location.origin+"/";
-        const response=await fetch(url,options);
-        if(!response.ok)throw new Error(response.status===429?"Сервис адресов временно ограничил запросы.":"Сервис адресов ответил ошибкой "+response.status+".");
-        let data;try{data=await response.json();}catch{throw new Error("Сервис адресов вернул некорректный ответ.");}geocodeCache[url]=data;
-        const keys=Object.keys(geocodeCache);if(keys.length>100)delete geocodeCache[keys[0]];
-        saveStorage("gadway-geocode-cache",geocodeCache);return data;
-      }finally{window.clearTimeout(timer);}
-    });
-    nominatimQueue=task.catch(()=>{});return task;
   }
   async function fetchJsonWithTimeout(url,timeoutMs=15000) {
     const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),timeoutMs);
@@ -273,24 +323,21 @@
       throw error;
     }finally{window.clearTimeout(timer);}
   }
-  function nominatimUrl(params) {
-    const query=new URLSearchParams({...params,operation:"search"});return "/api/nominatim?"+query.toString();
-  }
   async function geocodeAddress(query) {
     const trimmed=query.trim();if(trimmed.length<3)throw new Error("Введите адрес или название места (не менее 3 символов).");
-    const searchQuery=/санкт-петербург|петербург|спб/i.test(trimmed)?trimmed:trimmed+", Санкт-Петербург";
-    const data=await nominatimJson(nominatimUrl({format:"jsonv2",q:searchQuery,limit:"1",addressdetails:"1","accept-language":"ru"}));
-    if(!Array.isArray(data)||!data.length)throw new Error("Не нашли такой адрес. Уточните название и попробуйте ещё раз.");
+    const data=await window.GadWayOSM.search(trimmed);
+    if(!data.length)throw new Error("Не нашли такой адрес. Уточните название и попробуйте ещё раз.");
     const result=data[0],coords=[Number(result.lat),Number(result.lon)];
     if(!coords.every(Number.isFinite))throw new Error("Сервис адресов вернул некорректные координаты.");
-    return {coords,name:result.name||String(result.display_name||trimmed).split(",")[0],label:String(result.display_name||trimmed),address:addressLabel(result.address)||result.display_name||trimmed};
+    return {coords,name:result.name||String(result.display_name||trimmed).split(",")[0],label:String(result.display_name||trimmed),address:result.address||result.display_name||trimmed};
   }
   function lastDayRoutePoint() {
     for(let i=routeItems.length-1;i>=0;i--){const place=placeById.get(routeItems[i].placeId);if(place)return {coords:[place.lat,place.lon],name:place.name,label:place.name,address:place.district};}
     return null;
   }
   function fallbackRouteOrigin() {
-    return lastDayRoutePoint()||{coords:[cityCenter[1],cityCenter[0]],name:"Центр Санкт-Петербурга",label:"Центр Санкт-Петербурга",address:"Санкт-Петербург"};
+    const center=mapLibreMap?mapLibreMap.getCenter():{lat:cityCenter[1],lng:cityCenter[0]},city=currentCityName;
+    return lastDayRoutePoint()||{coords:[center.lat,center.lng],name:"Центр · "+city,label:"Центр · "+city,address:city};
   }
   function requestCurrentLocation(timeout=9000) {
     return new Promise((resolve,reject)=>{
@@ -305,6 +352,7 @@
   }
   function setUserLocation(coords,focusMap=false) {
     currentUserLocation=coords;
+    updateCityForLocation(coords);loadNearbyOsmPlaces(coords,true);
     if(mapLibreMap){
       if(userLocationMarker)userLocationMarker.remove();
       const dot=document.createElement("span");dot.className="user-location-pin";dot.setAttribute("aria-label","Вы здесь");dot.addEventListener("click",event=>event.stopPropagation());
@@ -415,36 +463,13 @@
     document.querySelectorAll("#navigation-from,#navigation-to,#route-use-location,#route-swap,.route-mode-button").forEach(control=>{control.disabled=false;});
     setNavigationStatus("Выберите точку на карте или введите адрес назначения.");
   }
-  function addressLabel(address) {
-    if(!address)return "";
-    const street=address.road||address.pedestrian||address.footway||address.path;
-    const streetLine=street?[street,address.house_number].filter(Boolean).join(", "):"";
-    const district=address.neighbourhood||address.suburb||address.city_district||address.city||address.town;
-    return [streetLine,district].filter(Boolean).join(" · ");
-  }
   async function inspectMapPoint(event) {
-    const coords=[event.lngLat.lat,event.lngLat.lng],feature=nearestMapFeature(event.point),name=featureName(feature),token=Date.now()+Math.random();
-    if(selectedMapPointMarker)selectedMapPointMarker.remove();
-    selectedMapPoint={token,coords,name:name||"Ищем адрес…",category:featureCategory(feature),address:"Определяем адрес…",description:name?"Загружаем адрес и подробности объекта…":"Ищем ближайший адрес в OpenStreetMap…",status:"Загрузка адреса",featureName:name};
-    setSelectedPointMarker(coords);selectedPlaceId=null;selectedHotelId=null;setTab("map",false);renderPlaces();renderMapPointCard();pointCaption(selectedMapPoint);setSheetState("half");
-    const lat=coords[0].toFixed(6),lon=coords[1].toFixed(6),url="/api/nominatim?"+new URLSearchParams({operation:"reverse",lat,lon});
-    try{
-      const result=await nominatimJson(url,()=>selectedMapPoint&&selectedMapPoint.token===token);
-      if(!result)return;
-      if(!selectedMapPoint||selectedMapPoint.token!==token)return;
-      const address=addressLabel(result.address),display=String(result.display_name||"");
-      selectedMapPoint.name=name||result.name||display.split(",")[0]||"Точка на карте";
-      selectedMapPoint.address=address||display||"Адрес не найден";
-      selectedMapPoint.description=name?"Объект карты: "+selectedMapPoint.category+". Адрес уточнён по OpenStreetMap.":"Координаты точки на карте Санкт-Петербурга.";
-      selectedMapPoint.status="Адрес найден";pointCaption(selectedMapPoint);if(activeTab==="map")renderPlaces();else renderMapPointCard();
-    }catch(error){
-      if(!selectedMapPoint||selectedMapPoint.token!==token)return;
-      selectedMapPoint.name=name||"Точка на карте";
-      selectedMapPoint.address="Адресный поиск временно недоступен";
-      selectedMapPoint.description=name?"На карте отмечен объект «"+name+"». Адрес можно определить по координатам.":"Показываем точные координаты без адреса.";
-      selectedMapPoint.status=friendlyGeocodeError(error);
-      pointCaption(selectedMapPoint);if(activeTab==="map")renderPlaces();else renderMapPointCard();
-    }
+    const coords=[event.lngLat.lat,event.lngLat.lng],feature=nearestMapFeature(event.point),token=++placeSelectionRequestId;
+    if(selectedMapPointMarker)selectedMapPointMarker.remove();setSelectedPointMarker(coords);selectedMapPoint=null;selectedPlaceId=null;selectedHotelId=null;setTab("map",false);
+    const knownPoi=mapFeaturePlace(feature,coords);
+    const place=knownPoi?registerOsmPlace(knownPoi,false):coordinatePlace(coords);
+    persistOsmPlaces();openPlace(place.id,false);
+    if(!knownPoi)enrichMapPlace(place,coords);
   }
   function initMap() {
     if(!window.maplibregl){
@@ -462,7 +487,7 @@
     mapLibreMap.on("load",()=>{
       document.querySelector("#map-fallback").hidden=true;
       places.forEach(place=>addMapMarker(place.id,[place.lon,place.lat],place.type,place.icon||iconFor(place.type),place.name,()=>openPlace(place.id,true)));
-      hotels.forEach(hotel=>addMapMarker(hotel.id,[hotel.lon,hotel.lat],"hotel","⌂",hotel.name,()=>openHotel(hotel.id,true)));
+      hotels.forEach(hotel=>addMapMarker(hotel.id,[hotel.lon,hotel.lat],"hotel","⌂",hotel.name,()=>openPlace(hotel.id,true)));
       customMapPlaces.forEach(place=>addMapMarker(place.id,[place.lon,place.lat],"custom","📍",place.name,()=>openCustomMapPlace(place)));
       mapLibreMap.addSource("gadway-route",{type:"geojson",data:{type:"Feature",geometry:{type:"LineString",coordinates:[]},properties:{}}});
       mapLibreMap.addLayer({id:"gadway-route-line",type:"line",source:"gadway-route",layout:{"line-join":"round","line-cap":"round"},paint:{"line-color":"#53d7a8","line-width":4,"line-opacity":.92,"line-dasharray":[2,1.5]}});
@@ -476,10 +501,11 @@
         inspectMapPoint(event);
       });
       mapLibreMap.on("pitch",updateMapModeButton);
-      mapLibreMap.on("moveend",updateMapModeButton);
+      mapLibreMap.on("moveend",()=>{updateMapModeButton();scheduleNearbyAtMapCenter();});
       updateMapModeButton();
       updateMapLayers();
       mapLibreMap.resize();
+      scheduleNearbyAtMapCenter();
     });
     mapLibreMap.on("error",event=>{
       if(event?.error)console.warn("MapLibre tile/style error:",event.error.message||event.error);
@@ -537,45 +563,107 @@
     if(selectedPlaceId&&placeById.has(selectedPlaceId)) {
       const place=placeById.get(selectedPlaceId);
       sectionRow.hidden=true;chips.hidden=true;search.hidden=true;list.hidden=true;detail.hidden=false;
+      sheetScroll.scrollTop=0;
+      if(place.provider==="osm"){
+        document.querySelector("#sheet-kicker").textContent=place.category.toLocaleUpperCase("ru");
+        document.querySelector("#sheet-title").textContent=place.name;
+        document.querySelector("#sheet-summary").textContent=place.address||place.display_name||place.district||place.lat.toFixed(5)+", "+place.lon.toFixed(5);
+        detail.innerHTML=renderOsmPlaceCard(place);
+        imageFallbacks(detail);loadPlaceReviews(place.id,detail);loadOsmPlaceDetails(place,detail);updateSelectedMarker(place.id);return;
+      }
       document.querySelector("#sheet-kicker").textContent=place.shortType.toLocaleUpperCase("ru");
       document.querySelector("#sheet-title").textContent=place.name;
       document.querySelector("#sheet-summary").textContent=place.district+" · ★ "+place.rating;
       document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>'+escapeHtml(place.name)+'</span><span class="caption-separator">·</span><span>'+escapeHtml(place.district)+'</span>';
-      detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span></div><p>'+escapeHtml(place.distance)+'</p><div class="detail-navigation-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-place" data-id="'+escapeHtml(place.id)+'">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div><section class="reviews-section" aria-labelledby="reviews-heading"><div class="reviews-heading"><h3 id="reviews-heading">Отзывы</h3><div class="reviews-summary" data-reviews-summary>Загрузка…</div></div><div class="reviews-list" data-reviews-list aria-live="polite"></div><form class="review-form" data-review-form><h4>Оставить отзыв</h4><label class="review-label">Ваше имя<input name="author_name" maxlength="80" required placeholder="Как к вам обращаться"></label><fieldset class="rating-picker"><legend>Оценка</legend><div class="rating-stars">'+[1,2,3,4,5].map(n=>'<button class="rating-star" type="button" data-rating="'+n+'" aria-label="'+n+' из 5 звёзд" aria-pressed="false">★</button>').join('')+'</div><input type="hidden" name="rating" value="0"></fieldset><label class="review-label">Текст отзыва<textarea name="comment" maxlength="1000" required rows="4" placeholder="Поделитесь впечатлениями"></textarea><small class="review-counter">0 / 1000</small></label><p class="review-error" data-review-error role="alert" hidden></p><button class="primary-button full-button" type="submit" data-review-submit>Отправить отзыв</button></form></section></div>';
+      detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><button class="reviews-jump" type="button" data-action="show-reviews"><span class="reviews-jump-summary" data-reviews-summary-top>★ — · загрузка отзывов…</span><span class="reviews-jump-cta">Отзывы и форма ↓</span></button><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span></div><p>'+escapeHtml(place.distance)+'</p><div class="detail-navigation-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-place" data-id="'+escapeHtml(place.id)+'">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div><section class="reviews-section" id="place-reviews" aria-labelledby="reviews-heading"><div class="reviews-heading"><h3 id="reviews-heading">Отзывы</h3><div class="reviews-summary" data-reviews-summary>Загрузка…</div></div><div class="reviews-list" data-reviews-list aria-live="polite"><p class="reviews-empty">Загружаем отзывы…</p></div><form class="review-form" data-review-form><h4>Оставить отзыв</h4><label class="review-label">Ваше имя<input name="author_name" maxlength="80" required placeholder="Как к вам обращаться"></label><fieldset class="rating-picker"><legend>Оценка</legend><div class="rating-stars">'+[1,2,3,4,5].map(n=>'<button class="rating-star" type="button" data-rating="'+n+'" aria-label="'+n+' из 5 звёзд" aria-pressed="false">★</button>').join('')+'</div><input type="hidden" name="rating" value="0"></fieldset><label class="review-label">Текст отзыва<textarea name="comment" maxlength="1000" required rows="4" placeholder="Поделитесь впечатлениями"></textarea><small class="review-counter">0 / 1000</small></label><p class="review-error" data-review-error role="alert" hidden></p><button class="primary-button full-button" type="submit" data-review-submit>Отправить отзыв</button></form></section></div>';
       imageFallbacks(detail);loadPlaceReviews(place.id,detail);updateSelectedMarker(place.id);return;
     }
     sectionRow.hidden=false;chips.hidden=false;search.hidden=false;list.hidden=false;detail.hidden=true;
     document.querySelector("#sheet-kicker").textContent="ВАШ ГОРОДСКОЙ ГИД";
-    document.querySelector("#sheet-title").textContent="Исследуйте Петербург";
-    document.querySelector("#sheet-summary").textContent="Красивые места, прогулки и маленькие открытия рядом.";
+    document.querySelector("#sheet-title").textContent="Места рядом · "+currentCityName;
+    document.querySelector("#sheet-summary").textContent="Реальные места и объекты OpenStreetMap рядом с вами.";
     document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>Исаакиевский собор</span><span class="caption-separator">·</span><span>центр города</span>';
     const visible=filteredPlaces();
     document.querySelector("#result-count").textContent=visible.length+" мест";
-    list.innerHTML=visible.length?visible.map(place=>'<article class="place-card" data-place-card="'+escapeHtml(place.id)+'"><img class="card-image" data-fallback src="'+escapeHtml(place.image)+'" alt="'+escapeHtml(place.name)+'" loading="lazy"><div class="card-copy"><p class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></p><h3 class="card-title">'+escapeHtml(place.name)+'</h3><p class="card-subtitle">'+escapeHtml(place.district)+' · '+escapeHtml(place.visit)+'</p><div class="card-actions"><button class="mini-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ В маршрут</button><span class="card-distance">Открыть ›</span></div></div></article>').join(""):'<p class="empty-message">Ничего не найдено. Попробуйте другое слово или фильтр.</p>';
+    list.innerHTML=visible.length?visible.map(place=>'<article class="place-card" data-place-card="'+escapeHtml(place.id)+'">'+(place.image?'<img class="card-image" data-fallback src="'+escapeHtml(place.image)+'" alt="'+escapeHtml(place.name)+'" loading="lazy">':'<div class="card-image place-image-placeholder" aria-hidden="true">'+escapeHtml(place.icon||"📍")+'</div>')+'<div class="card-copy"><p class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></p><h3 class="card-title">'+escapeHtml(place.name)+'</h3><p class="card-subtitle">'+escapeHtml(place.district)+' · '+escapeHtml(place.visit||"Место рядом")+'</p><div class="card-actions"><button class="mini-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ В маршрут</button><span class="card-distance">Открыть ›</span></div></div></article>').join(""):'<p class="empty-message">Ничего не найдено. Попробуйте другое слово или фильтр.</p>';
     imageFallbacks(list);updateSelectedMarker(null);updateMapLayers();
   }
 
+  function safeExternalUrl(value){
+    if(!value)return "";let url=String(value).trim();if(!/^https?:\/\//i.test(url))url="https://"+url;
+    try{const parsed=new URL(url);return parsed.protocol==="http:"||parsed.protocol==="https:"?parsed.href:"";}catch{return "";}
+  }
+  function featurePills(tags={}){
+    const labels={cuisine:"Кухня",delivery:"Доставка",takeaway:"На вынос",internet_access:"Wi-Fi",payment:"Оплата",wheelchair:"Доступность",outdoor_seating:"Летняя веранда",drive_through:"Автообслуживание",brand:"Бренд"};
+    return Object.entries(labels).filter(([key])=>tags[key]&&tags[key]!=="no").map(([key,label])=>'<span class="fact-pill">'+label+': '+escapeHtml(tags[key]==="yes"?"есть":tags[key])+'</span>').join("");
+  }
+  function osmContactLinks(place){
+    const website=safeExternalUrl(place.website||place.tags?.website||place.tags?.["contact:website"]),phone=String(place.phone||place.tags?.phone||place.tags?.["contact:phone"]||"").trim();
+    return (phone?'<a class="soft-button" href="tel:'+escapeHtml(phone.replace(/[^+\d]/g,""))+'">Позвонить</a>':"")+(website?'<a class="primary-button" href="'+escapeHtml(website)+'" target="_blank" rel="noopener noreferrer">Перейти на сайт</a>':"");
+  }
+  function osmSocialLinks(place){
+    const labels={instagram:"Instagram",vk:"VK",telegram:"Telegram",youtube:"YouTube"};
+    return Object.entries(place.social||{}).map(([network,value])=>{let url=String(value);if(!/^https?:\/\//i.test(url)){const hosts={instagram:"https://instagram.com/",vk:"https://vk.com/",telegram:"https://t.me/",youtube:"https://youtube.com/"};url=(hosts[network]||"https://")+url.replace(/^@/,"");}const safe=safeExternalUrl(url);return safe?'<a class="place-social-link" href="'+escapeHtml(safe)+'" target="_blank" rel="noopener noreferrer">'+labels[network]+'</a>':"";}).join("");
+  }
+  function renderOsmPlaceCard(place){
+    const opening=place.tags?.opening_hours||"";
+    return '<div class="detail-hero osm-detail-hero is-empty"><div class="osm-photo-gallery" data-photo-gallery hidden></div><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">'+escapeHtml(place.category)+'</span><span>·</span><span>OpenStreetMap</span></div><h2>'+escapeHtml(place.name)+'</h2><p class="osm-address" data-osm-address>Определяем адрес…</p><div class="osm-contact-actions" data-osm-contacts>'+osmContactLinks(place)+'</div><div class="osm-social-links" data-osm-social>'+osmSocialLinks(place)+'</div><div class="osm-opening"><strong data-opening-status>'+escapeHtml(window.GadWayOSM.openingStatus(opening))+'</strong>'+(opening?'<details><summary>График работы</summary><p>'+escapeHtml(opening)+'</p></details>':'<span>График в OpenStreetMap не указан</span>')+'</div><p class="osm-description" data-osm-description>'+escapeHtml(place.tags?.["description:ru"]||place.tags?.description||"Подробности загружаются из OpenStreetMap…")+'</p><div class="detail-facts osm-features" data-osm-features>'+featurePills(place.tags)+'</div><div class="detail-facts"><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span><a class="osm-edit-link" href="https://www.openstreetmap.org/'+escapeHtml(place.osm_type)+"/"+escapeHtml(place.osm_id)+'" target="_blank" rel="noopener noreferrer">Объект в OpenStreetMap</a></div><section class="reviews-section" aria-labelledby="reviews-heading"><div class="reviews-heading"><h3 id="reviews-heading">Отзывы</h3><div class="reviews-summary" data-reviews-summary>Загрузка…</div></div><div class="reviews-list" data-reviews-list aria-live="polite"><p class="reviews-empty">Загружаем отзывы…</p></div><form class="review-form" data-review-form><h4>Оставить отзыв</h4><label class="review-label">Ваше имя<input name="author_name" maxlength="80" required placeholder="Как к вам обращаться"></label><fieldset class="rating-picker"><legend>Оценка</legend><div class="rating-stars">'+[1,2,3,4,5].map(n=>'<button class="rating-star" type="button" data-rating="'+n+'" aria-label="'+n+' из 5 звёзд" aria-pressed="false">★</button>').join("")+'</div><input type="hidden" name="rating" value="0"></fieldset><label class="review-label">Текст отзыва<textarea name="comment" maxlength="1000" required rows="4" placeholder="Поделитесь впечатлениями"></textarea><small class="review-counter">0 / 1000</small></label><p class="review-error" data-review-error role="alert" hidden></p><button class="primary-button full-button" type="submit" data-review-submit>Отправить отзыв</button></form></section></div>';
+  }
+  async function loadOsmPlaceDetails(place,detail){
+    const placeId=place.id;
+    const alive=()=>selectedPlaceId===placeId&&detail.isConnected;
+    const fallbackAddress=place.address||place.display_name||place.lat.toFixed(5)+", "+place.lon.toFixed(5);
+    try{
+      const [exactResult,addressResult,photosResult]=await Promise.allSettled([
+        window.GadWayOSM.details(place),window.GadWayOSM.reverse(place.lat,place.lon),window.GadWayOSM.photos(place.lat,place.lon,60,place.tags||{})
+      ]);
+      if(!alive())return;
+      if(exactResult.status==="fulfilled"&&exactResult.value)Object.assign(place,exactResult.value);
+      const address=addressResult.status==="fulfilled"?addressResult.value:null;
+      const fullAddress=address&&(window.GadWayOSM.addressLabel(address.address||{})||address.display_name)||fallbackAddress;
+      const tags=place.tags||{},addressNode=detail.querySelector("[data-osm-address]");
+      if(addressNode)addressNode.textContent=fullAddress;
+      const categoryNode=detail.querySelector(".card-rating");if(categoryNode)categoryNode.textContent=place.category;
+      const contacts=detail.querySelector("[data-osm-contacts]");if(contacts)contacts.innerHTML=osmContactLinks(place);
+      const socials=detail.querySelector("[data-osm-social]");if(socials)socials.innerHTML=osmSocialLinks(place);
+      const description=detail.querySelector("[data-osm-description]");if(description)description.textContent=tags["description:ru"]||tags.description||tags.note||"Описание в OpenStreetMap не указано.";
+      const opening=detail.querySelector("[data-opening-status]");if(opening)opening.textContent=window.GadWayOSM.openingStatus(tags.opening_hours||"");
+      const features=detail.querySelector("[data-osm-features]");if(features)features.innerHTML=featurePills(tags);
+      const gallery=detail.querySelector("[data-photo-gallery]"),photos=photosResult.status==="fulfilled"?photosResult.value:[];
+      if(gallery&&photos.length){gallery.innerHTML=photos.map(photo=>'<a href="'+escapeHtml(photo.link||photo.url)+'" target="_blank" rel="noopener noreferrer" title="'+escapeHtml(photo.source+": "+photo.title)+'"><img src="'+escapeHtml(photo.url)+'" alt="'+escapeHtml(photo.title)+'" loading="lazy" referrerpolicy="no-referrer"><span>'+escapeHtml(photo.source)+'</span></a>').join("");gallery.querySelectorAll("img").forEach(image=>image.addEventListener("error",()=>{image.closest("a")?.remove();if(!gallery.children.length){gallery.hidden=true;detail.querySelector(".osm-detail-hero").classList.add("is-empty");}},{once:true}));gallery.hidden=false;detail.querySelector(".osm-detail-hero").classList.remove("is-empty");}
+      document.querySelector("#sheet-summary").textContent=fullAddress;
+      if(exactResult.status==="rejected"||addressResult.status==="rejected")console.info("Some optional OSM details were unavailable; showing the place card anyway");
+    }catch(error){
+      console.info("Optional OpenStreetMap place details were unavailable",error.message);
+    }finally{
+      if(alive()){
+        const addressNode=detail.querySelector("[data-osm-address]");
+        if(addressNode&&addressNode.textContent.includes("Определяем адрес"))addressNode.textContent=fallbackAddress;
+        document.querySelector("#sheet-summary").textContent=addressNode?.textContent||fallbackAddress;
+      }
+    }
+  }
   async function loadPlaceReviews(placeId, detail=document.querySelector("#place-detail")) {
-    const summary=detail.querySelector("[data-reviews-summary]"), list=detail.querySelector("[data-reviews-list]");
+    const summary=detail.querySelector("[data-reviews-summary]"), topSummary=detail.querySelector("[data-reviews-summary-top]"), list=detail.querySelector("[data-reviews-list]");
     if(!summary||!list)return;
     try {
-      const response=await fetch("/api/reviews?placeId="+encodeURIComponent(placeId));
-      const payload=await response.json();
-      if(!response.ok)throw new Error(payload.error||"Не удалось загрузить отзывы");
+      const payload=await window.GadWayReviews.list(placeId);
       const count=Number(payload.summary?.count)||0,average=Number(payload.summary?.average)||0;
       summary.innerHTML='<strong>★ '+(count?average.toFixed(1).replace(".",","):"—")+'</strong><span>'+count+' '+(count===1?"отзыв":count>=2&&count<=4?"отзыва":"отзывов")+'</span>';
+      if(topSummary)topSummary.textContent='★ '+(count?average.toFixed(1).replace(".",","):"—")+' · '+count+' '+(count===1?"отзыв":count>=2&&count<=4?"отзыва":"отзывов");
       list.innerHTML=payload.reviews.length?payload.reviews.map(review=>'<article class="review-item"><div class="review-item-head"><strong>'+escapeHtml(review.author_name)+'</strong><time>'+escapeHtml(new Intl.DateTimeFormat("ru-RU",{dateStyle:"medium"}).format(new Date(review.created_at)))+'</time></div><div class="review-item-rating" aria-label="Оценка '+Number(review.rating)+' из 5">'+"★".repeat(Number(review.rating))+"☆".repeat(5-Number(review.rating))+'</div><p>'+escapeHtml(review.comment)+'</p></article>').join(""):'<p class="reviews-empty">Пока нет отзывов. Будьте первым!</p>';
-    } catch(error) { summary.textContent="Отзывы временно недоступны";list.innerHTML='<p class="reviews-empty">Не удалось загрузить отзывы.</p>'; }
+    } catch(error) { console.warn("Could not load reviews",error);summary.textContent="Отзывы временно недоступны";if(topSummary)topSummary.textContent="Отзывы временно недоступны";list.innerHTML='<p class="reviews-empty">Не удалось загрузить отзывы. Форма отправки остаётся доступна.</p>'; }
   }
 
   function openPlace(id,focusMap) {
-    const place=placeById.get(id);if(!place)return;
+    const place=placeById.get(id);if(!place)return;placeSelectionRequestId++;
     selectedMapPoint=null;if(selectedMapPointMarker){selectedMapPointMarker.remove();selectedMapPointMarker=null;}
     selectedPlaceId=id;selectedHotelId=null;
     setTab("map",false);renderPlaces();setSheetState("half");
     if(focusMap)flyTo([place.lat,place.lon],16);
   }
   function openCustomMapPlace(place) {
+    placeSelectionRequestId++;
     selectedMapPoint={token:Date.now()+Math.random(),coords:[place.lat,place.lon],name:place.name,category:place.shortType,address:place.district,description:place.description,status:"Точка из маршрута дня"};
     setSelectedPointMarker(selectedMapPoint.coords);selectedPlaceId=null;setTab("map",false);renderPlaces();setSheetState("half");flyTo(selectedMapPoint.coords,16);
   }
@@ -586,6 +674,7 @@
     document.querySelector("#navigation-to").value=label;setTab("route");buildNavigationRoute();
   }
   function closeMapPoint() {
+    placeSelectionRequestId++;
     selectedMapPoint=null;if(selectedMapPointMarker){selectedMapPointMarker.remove();selectedMapPointMarker=null;}
     if(activeTab==="map")renderPlaces();else document.querySelector("#map-point-card").hidden=true;
   }
@@ -601,7 +690,7 @@
     const existing=routeItems.some(item=>{const place=placeById.get(item.placeId);return place&&Math.abs(place.lat-coords[0])<.00008&&Math.abs(place.lon-coords[1])<.00008;});
     if(existing){showToast("Эта точка уже есть в маршруте дня.");return;}
     const id="map-point-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),name=safePointLabel(point);
-    const custom={id,name,type:"custom",icon:"📍",shortType:point.category,district:point.address||"Санкт-Петербург",lat:coords[0],lon:coords[1],rating:"—",hours:"Точка добавлена с карты",visit:"По плану",distance:"Место, отмеченное на карте",image:"",description:point.description||"Точка на карте Санкт-Петербурга."};
+    const custom={id,name,type:"custom",icon:"📍",shortType:point.category,district:point.address||currentCityName,lat:coords[0],lon:coords[1],rating:"—",hours:"Точка добавлена с карты",visit:"По плану",distance:"Место, отмеченное на карте",image:"",description:point.description||"Точка на карте."};
     customMapPlaces.push(custom);placeById.set(id,custom);saveStorage("gadway-spb-custom-points",customMapPlaces);
     if(mapLibreMap&&mapLibreMap.isStyleLoaded())addMapMarker(id,[custom.lon,custom.lat],"custom","📍",custom.name,()=>openCustomMapPlace(custom));
     const nextHour=Math.min(20,10+routeItems.length*2);
@@ -708,7 +797,7 @@
     Object.entries(tabContent).forEach(([name,element])=>{element.hidden=name!==tab;});
     document.querySelectorAll(".nav-item").forEach(button=>{const active=button.dataset.tab===tab;button.classList.toggle("is-active",active);if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current");});
     document.querySelector("#sheet-kicker").textContent=tabText[tab].kicker;
-    document.querySelector("#sheet-title").textContent=tabText[tab].title;
+    document.querySelector("#sheet-title").textContent=tab==="map"?"Места рядом · "+currentCityName:tabText[tab].title;
     document.querySelector("#sheet-summary").textContent=tabText[tab].summary;
     if(tab!=="map"){selectedPlaceId=null;document.querySelector("#place-detail").hidden=true;document.querySelector("#place-list").hidden=false;document.querySelector("#filter-chips").hidden=false;document.querySelector(".search-box").hidden=false;document.querySelector("#panel-map .section-row").hidden=false;if(!selectedMapPoint)document.querySelector("#map-point-card").hidden=true;}
     sheetScroll.scrollTop=0;
@@ -794,7 +883,19 @@
     selectedPlaceId=null;renderPlaces();updateMapLayers();
   });
   const searchInput=document.querySelector("#place-search");
-  searchInput.addEventListener("input",()=>{query=searchInput.value;document.querySelector("#clear-search").hidden=!query;selectedPlaceId=null;renderPlaces();updateMapLayers();});
+  searchInput.addEventListener("input",()=>{query=searchInput.value;document.querySelector("#map-search-suggestions").hidden=true;mapSearchResults=[];document.querySelector("#clear-search").hidden=!query;selectedPlaceId=null;renderPlaces();updateMapLayers();});
+  searchInput.addEventListener("keydown",async event=>{
+    if(event.key!=="Enter")return;event.preventDefault();const term=searchInput.value.trim();if(term.length<3){showToast("Введите название места или адрес (не менее 3 символов).");return;}
+    const suggestions=document.querySelector("#map-search-suggestions");suggestions.hidden=false;suggestions.innerHTML='<p class="search-loading">Ищем места в OpenStreetMap…</p>';
+    try{
+      mapSearchResults=await window.GadWayOSM.search(term);
+      suggestions.innerHTML=mapSearchResults.length?mapSearchResults.map((place,index)=>'<button class="map-search-suggestion" type="button" role="option" data-search-index="'+index+'"><strong>'+escapeHtml(place.name)+'</strong><small>'+escapeHtml(place.category)+(place.address?' · '+escapeHtml(place.address):'')+'</small></button>').join(""):'<p class="search-loading">Ничего не найдено. Попробуйте другой запрос.</p>';
+    }catch(error){suggestions.innerHTML='<p class="search-loading">Поиск временно недоступен. Попробуйте ещё раз.</p>';console.info("Nominatim search failed",error.message);}
+  });
+  document.querySelector("#map-search-suggestions").addEventListener("click",event=>{
+    const button=event.target.closest("[data-search-index]");if(!button)return;const place=mapSearchResults[Number(button.dataset.searchIndex)];if(!place)return;
+    const realPlace=registerOsmPlace(place,true);persistOsmPlaces();document.querySelector("#map-search-suggestions").hidden=true;searchInput.value=realPlace.name;query="";openPlace(realPlace.id,true);
+  });
   document.querySelector("#clear-search").addEventListener("click",()=>{searchInput.value="";query="";document.querySelector("#clear-search").hidden=true;renderPlaces();searchInput.focus();});
   document.querySelector("#place-list").addEventListener("click",event=>{
     const add=event.target.closest('[data-action="add-place"]');if(add){addRouteStop(add.dataset.id);setTab("route");return;}
@@ -802,6 +903,7 @@
   });
   document.querySelector("#place-detail").addEventListener("click",event=>{
     const star=event.target.closest("[data-rating]");if(star){const form=star.closest("[data-review-form]"),rating=Number(star.dataset.rating);form.elements.rating.value=String(rating);form.querySelectorAll("[data-rating]").forEach(button=>{button.setAttribute("aria-pressed",String(Number(button.dataset.rating)<=rating));button.classList.toggle("is-selected",Number(button.dataset.rating)<=rating);});return;}
+    if(event.target.closest('[data-action="show-reviews"]')){document.querySelector("#place-reviews")?.scrollIntoView({behavior:"smooth",block:"start"});return;}
     if(event.target.closest('[data-action="back-place"]')){selectedPlaceId=null;renderPlaces();return;}
     const route=event.target.closest('[data-action="navigate-to-place"]');if(route){const place=placeById.get(route.dataset.id);if(place)startRouteToPoint({coords:[place.lat,place.lon],name:place.name,label:place.name,address:place.district});return;}
     const add=event.target.closest('[data-action="add-place"]');if(add){if(addRouteStop(add.dataset.id))setTab("route");}
@@ -814,8 +916,7 @@
     if(!rating){error.textContent="Выберите оценку от 1 до 5 звёзд.";error.hidden=false;return;}
     submit.disabled=true;submit.textContent="Отправляем…";
     try {
-      const response=await fetch("/api/reviews",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({placeId:selectedPlaceId,author_name:form.elements.author_name.value,rating,comment:form.elements.comment.value})});
-      const payload=await response.json();if(!response.ok)throw new Error(payload.error||"Не удалось отправить отзыв");
+      await window.GadWayReviews.add(selectedPlaceId,{author_name:form.elements.author_name.value,rating,comment:form.elements.comment.value});
       form.reset();form.elements.rating.value="0";form.querySelectorAll("[data-rating]").forEach(button=>{button.classList.remove("is-selected");button.setAttribute("aria-pressed","false");});form.querySelector(".review-counter").textContent="0 / 1000";
       await loadPlaceReviews(selectedPlaceId);showToast("Спасибо за отзыв!");
     } catch(err) {error.textContent=err.message||"Не удалось отправить отзыв. Попробуйте ещё раз.";error.hidden=false;}
@@ -855,7 +956,7 @@
   document.querySelector("#hotel-list").addEventListener("click",event=>{
     const book=event.target.closest('[data-action="book"]');if(book){showBooking(book.dataset.id);return;}
     const route=event.target.closest('[data-action="route-hotel"]');if(route){const hotel=hotelById.get(route.dataset.id);if(hotel)startRouteToPoint({coords:[hotel.lat,hotel.lon],name:hotel.name,label:hotel.name,address:hotel.district});return;}
-    const card=event.target.closest("[data-hotel]");if(card)openHotel(card.dataset.hotel,true);
+    const card=event.target.closest("[data-hotel]");if(card)openPlace(card.dataset.hotel,true);
   });
   document.querySelector("#booking-confirm").addEventListener("click",()=>{document.querySelector("#booking-dialog").close();showToast("Проверьте доступность у отеля перед поездкой");});
   document.querySelector("#tip-skip").addEventListener("click",()=>dismissTip(false));

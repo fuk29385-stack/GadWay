@@ -1,0 +1,97 @@
+/* GadWay adaptation of the imported Figma travel companion visual system.
+   Kept separate so the map and app.js selectors remain stable. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:wght@400;500;600&display=swap');
+
+:root {
+  color-scheme: light;
+  --ink: #24352f;
+  --muted: #777a70;
+  --paper: #fbf9f5;
+  --canvas: #f3ede2;
+  --line: #d9d3c8;
+  --green: #264d3b;
+  --green-dark: #1d3d2e;
+  --green-soft: #edf2e9;
+  --orange: #c96e4b;
+  --forest: #264d3b;
+  --terracotta: #c96e4b;
+  --border: #d9d3c8;
+  --shadow-sm: 0 8px 24px rgba(36, 53, 47, .08);
+  --shadow-md: 0 18px 50px rgba(36, 53, 47, .14);
+  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+body { color: var(--ink); background: #e9e6df; font-family: 'Inter', sans-serif; }
+button, input, textarea { font-family: inherit; }
+#app-shell { background: #e7e5df; }
+.brand-pill, .weather-pill, .icon-button, .map-caption, .map-zoom-controls {
+  border-color: rgba(255,255,255,.58);
+  color: #34463a;
+  background: rgba(251,249,245,.94);
+  box-shadow: 0 8px 26px rgba(34,43,35,.14);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+.brand-pill { border-radius: 18px; }
+.brand-mark { background: var(--forest); color: #f8f5ed; }
+.brand-pill strong { color: var(--ink); font-family: 'Lora', serif; font-size: 15px; }
+.brand-pill small { color: #7b8176; }
+.weather-pill { color: var(--ink); }
+.map-caption { color: #71776c; }
+.map-caption span:nth-child(2) { color: var(--ink); }
+.map-zoom-controls button { color: var(--forest); }
+.map-zoom-controls button + button { border-color: #e6e0d6; }
+.map-vignette { background: linear-gradient(180deg,rgba(36,53,47,.25),transparent 33%,transparent 62%,rgba(36,53,47,.18)); }
+.bottom-sheet { border-color: rgba(255,255,255,.9); background: rgba(251,249,245,.97); box-shadow: 0 -10px 40px rgba(36,53,47,.14); }
+.sheet-heading h1 { color: var(--ink); font-family: 'Lora', serif; font-weight: 500; letter-spacing: -.04em; }
+.sheet-kicker, .eyebrow { color: #8c755f; }
+.sheet-summary { color: #777a70; }
+.sheet-action { border-color: var(--line); color: var(--forest); background: white; }
+.search-box { border-color: var(--line); color: #7b8176; background: #fff; box-shadow: var(--shadow-sm); }
+.search-box input { color: var(--ink); }
+.filter-chip { border-color: var(--line); color: #5e685f; }
+.filter-chip.is-active { border-color: var(--forest); background: var(--forest); box-shadow: 0 5px 14px rgba(38,77,59,.2); }
+.section-row h2, .hotel-intro h2, .tips-intro h2 { color: var(--ink); font-family: 'Lora', serif; font-weight: 500; letter-spacing: -.025em; }
+.place-card, .hotel-card { border-color: #e7e0d5; border-radius: 19px; background: white; box-shadow: 0 7px 20px rgba(36,53,47,.055); }
+.place-card:hover, .hotel-card:hover { border-color: #c7bda9; box-shadow: var(--shadow-sm); }
+.card-title, .hotel-card .card-title { color: var(--ink); font-family: 'Inter', sans-serif; }
+.card-meta, .card-subtitle, .card-distance { color: #777a70; }
+.card-rating, .reviews-summary strong, .review-item-rating { color: var(--terracotta); }
+.mini-button, .primary-button { color: #fff; background: var(--forest); }
+.mini-button:active, .primary-button:active { background: var(--green-dark); }
+.soft-button { color: var(--forest); background: var(--green-soft); }
+.detail-copy h2, .booking-dialog h2 { color: var(--ink); font-family: 'Lora', serif; font-weight: 500; }
+.detail-copy p, .osm-description { color: #646d63 !important; }
+.fact-pill, .place-social-link { color: var(--forest); background: var(--green-soft); }
+.osm-opening, .review-form { border-color: #e7e0d5; background: #f6f2ea; }
+.reviews-section { border-color: #e7e0d5; }
+.reviews-heading h3, .review-form h4 { color: var(--ink); font-family: 'Lora', serif; font-weight: 500; }
+.review-item { border-color: #e9e3d9; background: #fff; }
+.review-item-head strong { color: var(--ink); }
+.review-item p { color: #5f685e; }
+.review-label, .rating-picker legend { color: #526052; }
+.review-label input, .review-label textarea { border-color: #ddd6ca; color: var(--ink); font-family: 'Inter', sans-serif; }
+.review-label input:focus, .review-label textarea:focus { border-color: #73907c; box-shadow: 0 0 0 3px rgba(38,77,59,.12); }
+.rating-star.is-selected { color: var(--terracotta); }
+.reviews-jump { border-color: #ead8c3; color: #785238; background: #fffaf3; }
+.bottom-nav { border-color: #e6e0d6; background: rgba(251,249,245,.97); }
+.nav-item { color: #85877e; }
+.nav-item.is-active { color: var(--forest); }
+.nav-badge { background: var(--terracotta); }
+.booking-dialog { color: var(--ink); background: rgba(251,249,245,.99); }
+.booking-fact, .booking-notice { background: #f1ece2; }
+.booking-fact strong { color: var(--forest); }
+.toast { background: #264d3b; }
+
+@media (min-width: 900px) {
+  .bottom-sheet { border: 1px solid rgba(255,255,255,.9); }
+  .bottom-nav { border: 1px solid #e6e0d6; }
+  .sheet-heading h1 { font-size: 28px; }
+  .place-card, .hotel-card { border-radius: 20px; }
+}
+
+@media (max-width: 519px) {
+  .brand-pill, .weather-pill, .icon-button, .map-caption, .map-zoom-controls { box-shadow: 0 6px 18px rgba(34,43,35,.12); }
+  .bottom-sheet { border-radius: 28px 28px 0 0; }
+}
