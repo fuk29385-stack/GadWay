@@ -447,7 +447,6 @@
     }
   }
   function initMap() {
-<<<<<<< HEAD
     if(!window.maplibregl){
       appShell.classList.add("map-offline");
       document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>Карта недоступна офлайн</span>';
@@ -458,18 +457,6 @@
       center:cityCenter,zoom:15,pitch:60,bearing:-17.6,
       attributionControl:false,dragRotate:true,pitchWithRotate:true,touchPitch:true,touchZoomRotate:true,
       cooperativeGestures:false,renderWorldCopies:false
-=======
-    if(!window.L){appShell.classList.add("map-offline");document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>Карта недоступна офлайн</span>';return;}
-    leafletMap=L.map("map",{zoomControl:false,attributionControl:false,preferCanvas:true}).setView(cityCenter,13);
-    const tiles=L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:20,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(leafletMap);
-    const mapFallback=document.querySelector("#map-fallback");
-    tiles.once("load",()=>{if(!appShell.classList.contains("map-tiles-error"))mapFallback.hidden=true;});
-    tiles.on("tileerror",()=>{appShell.classList.add("map-tiles-error");mapFallback.hidden=false;});
-    tiles.on("tileload",()=>{appShell.classList.remove("map-tiles-error");mapFallback.hidden=true;});
-    places.forEach(place=>{
-      const marker=L.marker([place.lat,place.lon],{icon:createPin(place.type,place.icon||iconFor(place.type),place.name),keyboard:true,title:place.name}).addTo(leafletMap);
-      marker.on("click",()=>openPlace(place.id,true));markerById.set(place.id,marker);
->>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
     });
     mapLibreMap.on("style.load",applyDarkMapStyle);
     mapLibreMap.on("load",()=>{
@@ -554,14 +541,8 @@
       document.querySelector("#sheet-title").textContent=place.name;
       document.querySelector("#sheet-summary").textContent=place.district+" · ★ "+place.rating;
       document.querySelector("#map-caption").innerHTML='<span class="caption-dot"></span><span>'+escapeHtml(place.name)+'</span><span class="caption-separator">·</span><span>'+escapeHtml(place.district)+'</span>';
-<<<<<<< HEAD
       detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span><span class="fact-pill">'+place.lat.toFixed(5)+", "+place.lon.toFixed(5)+'</span></div><p>'+escapeHtml(place.distance)+'</p><div class="detail-navigation-actions"><button class="primary-button full-button" type="button" data-action="navigate-to-place" data-id="'+escapeHtml(place.id)+'">Построить маршрут</button><button class="soft-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div></div>';
       imageFallbacks(detail);updateSelectedMarker(place.id);return;
-=======
-      detail.innerHTML='<div class="detail-hero"><img data-fallback src="'+escapeHtml(place.image)+'" alt="Вид места: '+escapeHtml(place.name)+'"><button class="detail-back" type="button" data-action="back-place" aria-label="Назад">‹</button></div><div class="detail-copy"><div class="card-meta"><span class="card-rating">★ '+escapeHtml(place.rating)+'</span><span>·</span><span>'+escapeHtml(place.shortType)+'</span></div><h2>'+escapeHtml(place.name)+'</h2><p>'+escapeHtml(place.description)+'</p><div class="detail-facts"><span class="fact-pill">◷ '+escapeHtml(place.hours)+'</span><span class="fact-pill">⌖ '+escapeHtml(place.visit)+'</span></div><p>'+escapeHtml(place.distance)+'</p><button class="primary-button full-button" type="button" data-action="add-place" data-id="'+escapeHtml(place.id)+'">＋ Добавить в маршрут</button></div>';
-      detail.querySelector(".detail-copy").insertAdjacentHTML("beforeend",'<div class="wiki-info" aria-live="polite"><span class="wiki-spinner" aria-hidden="true"></span><span>Загружаем дополнительные сведения…</span></div>');
-      imageFallbacks(detail);updateSelectedMarker(place.id);loadWikipediaSummary(place);return;
->>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
     }
     sectionRow.hidden=false;chips.hidden=false;search.hidden=false;list.hidden=false;detail.hidden=true;
     document.querySelector("#sheet-kicker").textContent="ВАШ ГОРОДСКОЙ ГИД";
@@ -581,7 +562,6 @@
     setTab("map",false);renderPlaces();setSheetState("half");
     if(focusMap)flyTo([place.lat,place.lon],16);
   }
-<<<<<<< HEAD
   function openCustomMapPlace(place) {
     selectedMapPoint={token:Date.now()+Math.random(),coords:[place.lat,place.lon],name:place.name,category:place.shortType,address:place.district,description:place.description,status:"Точка из маршрута дня"};
     setSelectedPointMarker(selectedMapPoint.coords);selectedPlaceId=null;setTab("map",false);renderPlaces();setSheetState("half");flyTo(selectedMapPoint.coords,16);
@@ -595,26 +575,6 @@
   function closeMapPoint() {
     selectedMapPoint=null;if(selectedMapPointMarker){selectedMapPointMarker.remove();selectedMapPointMarker=null;}
     if(activeTab==="map")renderPlaces();else document.querySelector("#map-point-card").hidden=true;
-=======
-  async function loadWikipediaSummary(place) {
-    const requestId=++wikipediaRequest;
-    async function fetchSummary(language) {
-      const endpoint="https://"+language+".wikipedia.org/w/api.php?"+new URLSearchParams({action:"query",generator:"search",gsrsearch:place.name,gsrlimit:"1",prop:"extracts",exintro:"1",explaintext:"1",format:"json",origin:"*"});
-      try {
-        const response=await fetch(endpoint,{headers:{Accept:"application/json"}});
-        if(!response.ok)return "";
-        const payload=await response.json();
-        const page=Object.values(payload?.query?.pages||{})[0];
-        return typeof page?.extract==="string"?page.extract.trim().slice(0,700):"";
-      } catch { return ""; }
-    }
-    let summary=await fetchSummary("ru");
-    if(!summary)summary=await fetchSummary("en");
-    if(requestId!==wikipediaRequest||selectedPlaceId!==place.id)return;
-    const target=document.querySelector("#place-detail .wiki-info");
-    if(!target)return;
-    target.innerHTML=summary?'<strong>Из Википедии</strong><p>'+escapeHtml(summary)+'</p>':'<span>Дополнительные сведения сейчас недоступны.</span>';
->>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
   }
   function addRouteStop(id) {
     if(!placeById.has(id))return false;
@@ -741,11 +701,7 @@
     sheetScroll.scrollTop=0;
     if(openSheet)setSheetState("half");
     updateMapLayers();
-<<<<<<< HEAD
     if(mapLibreMap)window.setTimeout(()=>mapLibreMap&&mapLibreMap.resize(),100);
-=======
-    if(leafletMap)window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>leafletMap&&leafletMap.invalidateSize({pan:false})));
->>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
   }
 
   function visibleFor(state) {
@@ -924,18 +880,8 @@
     else showToast("Скопируйте ссылку из адресной строки");
   });
 
-<<<<<<< HEAD
   window.addEventListener("resize",()=>{setSheetState(sheet.dataset.state);if(mapLibreMap)mapLibreMap.resize();});
   window.addEventListener("keydown",event=>{if(event.key==="Escape"&&selectedMapPoint)closeMapPoint();else if(event.key==="Escape"&&selectedPlaceId){selectedPlaceId=null;renderPlaces();}});
-=======
-  window.addEventListener("resize",()=>{setSheetState(sheet.dataset.state);if(leafletMap)leafletMap.invalidateSize({pan:false});});
-  if("ResizeObserver" in window){
-    const mapObserver=new ResizeObserver(()=>{if(leafletMap)leafletMap.invalidateSize({pan:false});});
-    mapObserver.observe(document.querySelector("#map"));
-    mapObserver.observe(appShell);
-  }
-  window.addEventListener("keydown",event=>{if(event.key==="Escape"&&selectedPlaceId){selectedPlaceId=null;renderPlaces();}});
->>>>>>> 04a5337940ddfe062f023755a2532aa554d31d4c
 
   function init() {
     initMap();
