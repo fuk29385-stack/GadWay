@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f7f7f5">
+  <meta name="theme-color" content="#0d1117">
   <meta name="description" content="Карманный путеводитель по Санкт-Петербургу: места, дневной маршрут, отели и советы. Откройте город в своём темпе.">
   <title>GadWay — Петербург рядом</title>
   <link rel="preconnect" href="https://unpkg.com">
-  <link rel="preconnect" href="https://basemaps.cartocdn.com">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="preconnect" href="https://tiles.openfreemap.org">
+  <link rel="preconnect" href="https://routing.openstreetmap.de" crossorigin>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,9 +33,9 @@
 
     <div class="map-caption" id="map-caption"><span class="caption-dot"></span><span>Исаакиевский собор</span><span class="caption-separator">·</span><span>центр города</span></div>
     <div class="map-zoom-controls" aria-label="Управление масштабом карты">
-      <button id="zoom-in" type="button" aria-label="Приблизить">+</button><button id="zoom-out" type="button" aria-label="Отдалить">−</button>
+      <button id="zoom-in" type="button" aria-label="Приблизить">+</button><button id="zoom-out" type="button" aria-label="Отдалить">−</button><button id="map-mode" type="button" aria-pressed="true" aria-label="Переключить режим 2D или 3D">3D</button>
     </div>
-    <div class="map-credit">© OpenStreetMap · © CARTO</div>
+    <div class="map-credit">© OpenMapTiles · © OpenStreetMap contributors · OpenFreeMap</div>
 
     <section class="bottom-sheet" id="bottom-sheet" aria-label="Панель путеводителя" data-state="half">
       <button class="sheet-handle-area" id="sheet-handle" type="button" aria-label="Переместить панель. Нажмите, чтобы изменить её высоту" aria-controls="sheet-content">
@@ -49,15 +50,31 @@
       <div class="sheet-scroll" id="sheet-content">
         <section class="tab-panel" id="panel-map" aria-label="Места на карте">
           <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg><input id="place-search" type="search" placeholder="Место, кухня или впечатление" autocomplete="off"><button id="clear-search" type="button" aria-label="Очистить поиск" hidden>×</button></label>
+          <div class="map-search-suggestions" id="map-search-suggestions" role="listbox" aria-label="Результаты поиска" hidden></div>
           <div class="filter-chips" id="filter-chips" role="group" aria-label="Фильтр мест">
             <button class="filter-chip is-active" type="button" data-filter="all">Все</button><button class="filter-chip" type="button" data-filter="food">Поесть</button><button class="filter-chip" type="button" data-filter="walk">Погулять</button><button class="filter-chip" type="button" data-filter="photo">Фото-места</button>
           </div>
           <div class="section-row"><div><p class="eyebrow">ПОДОБРАНО ДЛЯ ВАС</p><h2>Места поблизости</h2></div><span class="result-count" id="result-count"></span></div>
           <div class="place-list" id="place-list"></div>
           <div class="place-detail" id="place-detail" hidden></div>
+          <div class="map-point-card" id="map-point-card" hidden></div>
         </section>
 
         <section class="tab-panel" id="panel-route" aria-label="Маршрут на день" hidden>
+          <section class="navigation-planner" aria-label="Построить маршрут к выбранной точке">
+            <div class="navigation-planner-head"><div><p class="eyebrow">МАРШРУТ ДО ТОЧКИ</p><h2>Как добраться</h2></div><span class="route-live-indicator">OSRM</span></div>
+            <div class="route-mode-switch" id="route-mode-switch" role="group" aria-label="Режим движения">
+              <button class="route-mode-button is-active" type="button" data-route-mode="foot" aria-pressed="true">Пешком</button>
+              <button class="route-mode-button" type="button" data-route-mode="bike" aria-pressed="false">Велосипед</button>
+              <button class="route-mode-button" type="button" data-route-mode="car" aria-pressed="false">На авто</button>
+            </div>
+            <div class="navigation-field"><label for="navigation-from">ОТКУДА</label><input id="navigation-from" type="text" value="Моё местоположение" autocomplete="off" placeholder="Адрес или место"><button id="route-use-location" type="button" aria-label="Использовать моё местоположение">⌖</button></div>
+            <div class="navigation-field"><label for="navigation-to">КУДА</label><input id="navigation-to" type="text" autocomplete="off" placeholder="Выберите точку на карте или введите адрес"><button id="route-swap" type="button" aria-label="Поменять начало и конец маршрута">⇅</button></div>
+            <button id="build-navigation-route" class="primary-button full-button navigation-build" type="button">Построить маршрут</button>
+            <p id="navigation-status" class="navigation-status" role="status" aria-live="polite">Выберите точку на карте или введите адрес назначения.</p>
+            <p class="route-attribution">Маршрутизация <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS OSRM</a> · данные <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a></p>
+            <div id="navigation-result" class="navigation-result" hidden><span class="navigation-result-icon">↗</span><div><strong id="navigation-result-distance"></strong><small id="navigation-result-duration"></small></div><button id="clear-navigation-route" type="button">Очистить</button></div>
+          </section>
           <div class="route-overview"><span class="route-date-icon">☀</span><span><strong>Идеальный день в центре</strong><small id="route-summary">Начните с любимых мест и соберите свой план</small></span><button id="clear-route" class="text-button" type="button">Очистить</button></div>
           <div class="route-stats" id="route-stats"></div>
           <div id="route-list" class="route-list"></div>
@@ -98,7 +115,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
